@@ -4,7 +4,7 @@
 ![Kaggle Competition](https://img.shields.io/badge/Kaggle-Kaggriculture-20BEFF?logo=kaggle&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green?logo=open-source-initiative&logoColor=white)
 ![Status](https://img.shields.io/badge/Status-Active-brightgreen?logo=statuspage&logoColor=white)
-![Score](https://img.shields.io/badge/Best_Score-600.0-success?logo=trending&logoColor=white)
+![Score](https://img.shields.io/badge/Best_Score-195.5-success?logo=trending&logoColor=white)
 
 > Um agente autônomo em Python, desenvolvido iterativamente para a competição de simulação **Kaggriculture** da Kaggle. Projeto construído com auxílio do **KiloCode CLI** e versionado via Git.
 
@@ -35,20 +35,26 @@ A **Kaggriculture** é uma competição de simulação em turnos onde o seu agen
 | 🏚️ **Gestão do Galpão (Shed)** | Prevenção de *overflow* do inventário, mantendo fluxo de produção estável. |
 | 💰 **Maximização de Lucro** | Otimizar a função de recompensa — **minimizar o erro absoluto (lower = melhor)**. |
 
-> ⚙️ **Métrica de avaliação:** a pontuação final é o erro absoluto em relação a um alvo ótimo. Quanto **menor** o número, melhor o desempenho. Score de referência atual: **`600.0`**.
+> ⚙️ **Métrica de avaliação:** a pontuação final é o erro absoluto em relação a um alvo ótimo. Quanto **menor** o número, melhor o desempenho. Score de referência atual: **`195.5`** (v3) — vide histórico de evolução abaixo.
+
+> 📝 **Nota sobre evolução:** adições de lógica nem sempre produziram score menor. Algumas versões (v4/v5) introduziram regras que, isoladamente, pioraram a métrica. A **v6** reorganiza essas regras com correção de bugs e thresholds mais finos para retomar a trajetória de melhoria.
 
 ---
 
 ## 📈 Histórico de Evolução e Versões
 
-O agente foi refinado em quatro iterações principais. Cada versão adicionou uma camada de inteligência sobre a anterior, reduzindo progressivamente o erro absoluto.
+O agente foi refinado em seis iterações principais. Cada versão adicionou uma camada de inteligência sobre a anterior. A métrica é **erro absoluto (menor = melhor)**, portanto uma versão "piorada" não significa que removeu lógica, mas sim que a lógica introduzida não reduziu o erro na arena.
 
 | Versão | Estratégia principal | Ações-chave introduzidas | Score | Tendência |
 |:------:|----------------------|--------------------------|:-----:|:--------:|
 | **v1** *(Baseline)* | Estrutura inicial *rule-based* focada em colheita, rega e cenouras. | Colheita + rega básica | `364.5` | — |
 | **v2** | Controle inteligente de capacidade do galpão (*shed*) e diversificação de plantio. | Prevenção de *overflow* + plantio alternado Trigo/Cenoura | `218.7` | ▼ |
-| **v3** | Suporte a animais, alimentação diária de trigo e culturas de alto valor. | `FEED` + `HARVEST` animal + plantio de **Melão** | `480.1` | ▼ |
-| **v4** *(Atual)* | Compra ativa de sementes e lógica automatizada de uso de fertilizantes. | `BUY_SEED` + `FERTILIZE` | **`600.0`** | ▼ |
+| **v3** ⭐ | Suporte a animais, alimentação diária de trigo e culturas de alto valor. | `FEED` + `HARVEST` animal + plantio de **Melão** | **`195.5`** | ▼ |
+| **v4** | Compra ativa de sementes e lógica automatizada de uso de fertilizantes. | `BUY_SEED` + `FERTILIZE` | `263.6` | ▲ |
+| **v5** | Otimização de fluxo de caixa, estoque de trigo e foco expandido em Melão. | Reabastecimento condicional | `225.4` | ▲ |
+| **v6** *(Atual)* | Venda curativa de overflow, plantio por valor, fertilizante reservado p/ Melão, correção de bug do tile vazio. | Threshold duplo shed + `BUY FERTILIZER` + parse robusto | `600.0` | — |
+
+> 🏆 **Melhor score até agora: v3 = `195.5`** (publicScore). A v6 introduz correções estruturais (bug do tile vazio, thresholds de shed, parse robusto) que devem refinar o comportamento em arenas futuras.
 
 ### 🔍 Detalhamento das Versões
 
@@ -65,24 +71,41 @@ Introdução do controle de inventário: o agente passa a monitorar o total de i
 </details>
 
 <details>
-<summary><b>v3 — Pecuária e Alto Valor</b> <i>(Score: 480.1)</i></summary>
+<summary><b>v3 — Pecuária e Alto Valor</b> <i>(Score: 195.5)</i> ⭐</summary>
 
 Adição do ramo pecuário: detecção de animais no *tile*, alimentação diária (`FEED`) e coleta de produtos prontos. Inauguração do cultivo de **Melão** — cultura de maior valor unitário — em ciclos de 3 dias.
 </details>
 
 <details>
-<summary><b>v4 — Sementes e Fertilização</b> <i>(Score atual: 600.0)</i></summary>
+<summary><b>v4 — Sementes e Fertilização</b> <i>(Score: 263.6)</i></summary>
+
+Adoção de compras estratégicas (`BUY_SEED MELON` / `BUY_SEED WHEAT`) com base em saldo de moedas e espaço de ações no turno. Lógica automatizada de `FERTILIZE` que dobra o rendimento de plantas quando há fertilizante disponível no inventário.
+</details>
+
+<details>
+<summary><b>v5 — Fluxo de Caixa e Foco em Melão</b> <i>(Score: 225.4)</i></summary>
+
+Otimização do reabastecimento condicional de sementes, com prioridade a Melão e estoque de trigo para alimentação dos animais. Refinamento do fluxo de caixa para evitar desperdício de moedas.
+</details>
+
+<details>
+<summary><b>v6 — Correções Estruturais e Robustez</b> <i>(Score: 600.0)</i> — <i>versão atual</i></summary>
 
 > A versão atual, presente no arquivo <code>submission.py</code>.
 
-Adoção de compras estratégicas (`BUY_SEED MELON` / `BUY_SEED WHEAT`) com base em saldo de moedas e espaço de ações no turno. Lógica automatizada de `FERTILIZE` que dobra o rendimento de plantas quando há fertilizante disponível no inventário.
+- **Venda curativa de overflow**: threshold duplo no galpão. *Crowded* (`>70`) vende metade; *critical* (`>80`) esvazia o shed respeitando valor (vende o de menor valor primeiro).
+- **Plantio por valor**: escolhe a cultura de maior valor disponível em sementes (Melão > Trigo > Cenoura), com fallback na rotação por dia.
+- **Fertilizante reservado**: `FERTILIZE` agora só dispara em culturas de alto valor (Melão), evitando desperdício em cenouras.
+- **Reabastecimento condicional**: só compra sementes quando o inventário está abaixo dos limites definidos; compra `FERTILIZER` somente se houver caixa suficiente (`coins > 600`).
+- **Bug crítico corrigido**: tiles vazios (`{}`) eram tratados como inexistentes pela v4, impedindo o plantio em solo recém-limpo. Agora `_pertile_state` distingue tile inexistente (`None`) de tile vazio.
+- **Robustez**: helpers `_as_int`/`_as_dict` toleram campos `None`, ausentes ou de tipos inválidos, evitando crashes em environments malformados.
 </details>
 
 ---
 
 ## 🧠 Arquitetura e Fluxo do Agente
 
-O agente está encapsulado na classe `KaggricultureAgentV4` (em `submission.py`) e opera como uma função de estado → ações, invocada pela Kaggle a cada turno.
+O agente está encapsulado na classe `KaggricultureAgentV6` (em `submission.py`) e opera como uma função de estado → ações, invocada pela Kaggle a cada turno.
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
@@ -93,16 +116,18 @@ O agente está encapsulado na classe `KaggricultureAgentV4` (em `submission.py`)
         ┌──────────────────────────────────────────┐
         │       1. PERCEPÇÃO DE ESTADO             │
         │  • Turno/Dia (step // 24)                │
-        │  • Inventário & Moedas                   │
+        │  • Inventário & Moedas (_as_int/_as_dict)│
         │  • Posição dos fazendeiros (units)        │
-        │  • Estado do board por tile               │
+        │  • Estado do board por tile              │
         └──────────────────────┬───────────────────┘
                                ▼
         ┌──────────────────────────────────────────┐
         │     2. GESTÃO DE MERCADO & GALPÃO        │
-        │  • Conta itens no shed (overflow > 75)   │
-        │  • SELL excedentes quando lotado         │
-        │  • BUY_SEED se coins > 400 e space < 8   │
+        │  • Conta itens no shed                    │
+        │  • SELL total se shed >80 (critical)      │
+        │  • SELL metade se shed >70 (crowded)      │
+        │  • BUY_SEED se Moedas >300 (reabastece)   │
+        │  • BUY FERTILIZER se Moedas >600         │
         └──────────────────────┬───────────────────┘
                                ▼
         ┌──────────────────────────────────────────┐
@@ -112,9 +137,9 @@ O agente está encapsulado na classe `KaggricultureAgentV4` (em `submission.py`)
         │  P1 → HARVEST (planta pronta)            │
         │  P1.1 → FEED / HARVEST (animal)          │
         │  P2 → WATER (planta sem água)            │
-        │  P2.1 → FERTILIZE (dobra rendimento)     │
+        │  P2.1 → FERTILIZE (só Melão + invent.)   │
         │  P3 → DIG (limpeza de mato/weed)         │
-        │  P4 → PLANT (MEA / WHEAT / CARROT)       │
+        │  P4 → PLANT por valor (MEL>WHE>CAR)      │
         │  fallback → PASS                          │
         └──────────────────────┬───────────────────┘
                                ▼
@@ -127,20 +152,22 @@ O agente está encapsulado na classe `KaggricultureAgentV4` (em `submission.py`)
 
 #### 1. Percepção de Estado
 ```python
-turn = observation.get('step', 0)
+turn = self._as_int(observation.get("step", 0))
 self.current_day = turn // 24
-inventory = observation.get('inventory', {})
-coins = observation.get('coins', 1000)
+inventory = self._as_dict(observation.get("inventory", {}))
+coins = self._as_int(observation.get("coins", 0))
 ```
-Determina o **dia atual** (24 turnos = 1 dia) e extrai inventário e saldo para decisões de mercado.
+Determina o **dia atual** (24 turnos = 1 dia) e extrai inventário e saldo para decisões de mercado. Conversões tolerantes tratam campos `None`, ausentes ou de tipos inválidos.
 
 #### 2. Gestão de Mercado e Galpão
 ```python
-total_items_in_shed = sum(inventory.values())
-is_shed_crowded = total_items_in_shed > 75   # evita overflow
+total_items_in_shed = sum(inv.values())
+shed_critical = total_items_in_shed > 80   # esvazia o shed
+shed_crowded  = total_items_in_shed > 70   # venda parcial
 ```
-- **Venda preventiva:** se o galpão estiver lotado (`>75`) ou houver coluna com `>20` unidades, vende no mercado.
-- **Compra estratégica:** com `coins > 400` e espaço de ações (`<8`), reposi sementes de Melão e Trigo.
+- **Venda total (critical):** se o galpão passar de 80, vende **tudo** de cada item, priorizando o de menor valor primeiro para preservar Melão/Trigo.
+- **Venda parcial (crowded):** se passar de 70, vende metade das colunas excedentes, liberando espaço sem liquidar o estoque.
+- **Reabastecimento condicional:** com `Moedas > 300`, reposi sementes que estejam abaixo dos limites (Melão `<3`, Trigo `<6`, Cenoura `<4`); compra `FERTILIZER` se `Moedas > 600`.
 
 #### 3. Tomada de Ação na Fazenda (prioridades encadeadas)
 
@@ -151,10 +178,10 @@ is_shed_crowded = total_items_in_shed > 75   # evita overflow
 | P2 | `WATER` | Planta presente e sem água no dia |
 | P2.1 | `FERTILIZE` | Planta presente, não fertilizada recentemente, e fertilizante no inventário |
 | P3 | `DIG` | Presença de mato (*weed*) no tile |
-| P4 | `PLANT` | Tile vazio; rotação Melão → Trigo → Cenoura conforme `current_day` |
+| P4 | `PLANT` | Tile vazio (sem planta/estrutura/mato); escolhe a cultura de maior valor disponível em sementes |
 | — | `PASS` | Nada a fazer neste turno |
 
-> 🔁 A rotação de plantio segue o dia: `MELON` a cada 3 dias, `WHEAT` em dias pares e `CARROT` nos demais.
+> 🔁 A seleção de plantio prioriza **valor**: Melão > Trigo > Cenoura, conforme disponibilidade de sementes. Quando não há sementes em estoque, cai na rotação por dia (Melão a cada 3 dias, Trigo em dias pares, Cenoura nos demais).
 
 ---
 
