@@ -1,224 +1,311 @@
-class KaggricultureAgentV6:
-    """
+"""
+Kaggriculture Autonomous AI Agent — Versão 7 (v7)
 
-    Agente autônomo V6 para a competição Kaggriculture.
+Reescrita completa utilizando o schema oficial de observação da Kaggriculture
+(documentado em AGENTS.md / README.md da competição).
 
-    Melhorias em relação à V5:
-      - Orçamento de ações por turno evita inundar o motor e bloquear rega/colheita.
-      - Venda "curativa" de overflow: esvazia o shed de vez quando lotado.
-      - Prioridade de culturas por valor: MELON > WHEAT > CARROT.
-      - Reabastecimento de sementes só quando o inventário está baixo.
-      - Fertilizante reservado apenas para culturas de alto valor (MELON).
-      - Bug crítico corrigido: tile vazio ({}) tratado como plantável.
-      - Maior robustez contra campos ausentes/None e tipos inválidos.
-    """
+Schema da observacao (campos usados):
+  obs["player"]                       -> 0 ou 1
+  obs["step"], obs["day"], obs["hour"]
+  obs["farms"][player]["money"]       -> saldo (coins) — vence quem tem mais
+  obs["farms"][player]["tiles"][y][x] -> None | "LOCKED" | dict(PLANT/WEED/COOP/PASTURE)
+  obs["farms"][player]["farmer"]      -> [x, y]
+  obs["farms"][player]["hands"]       -> [[x, y], ...]
+  obs["farms"][player]["unlocked_quadrants"]
+  obs["private"]["shed"]             -> {item: count}  (produzido + animais + fertilizer)
+  obs["private"]["seeds"]             -> {crop: count}  (consumido por PLANT)
+  obs["private"]["inventories"]       -> [farmer_inv, hand1_inv, ...]
+  obs["market"]["prices"]             -> {product: preco_venda atual}
+  obs["town"]["unlocked_shops"]
 
-    SHED_SAFE_CAP = 70
-    SHED_CRITICAL = 80
-    LOW_COINS_THRESHOLD = 300
-    BUY_BUDGET_ACTIONS = 4
+Formato da acao retornada:
+  {"farmer": [op, ...args], "hands": [[op, ...], ...], "market": [[op, ...], ...]}
 
-    CROP_VALUE = {
-        "MELON": 3,
-        "WHEAT": 2,
-        "CARROT": 1,
-    }
-    HIGH_VALUE_CROPS = ("MELON",)
+Estrategia (v7):
+  - Plantar culturas de alto valor (prioridade MELON > STRAWBERRY > TOMATO
+    > CARROT > WHEAT) respeitando disponibilidade de sementes.
+  - Regar todo dia (janela de bonus).
+  - Fertilizar culturas de alto valor (dobra o bonus de rega p/ 3 dias).
+  - Colher assim que a planta atinge first_yield_day (release p/ plantio novo)
+    ou aguardar max_yield_day p/ maximizar yield (tradeoff simples: colhe no max).
+  - Limpar mato (DIG) para liberar espaco.
+  - Manter estoque de sementes e trigo (compra se faltar).
+  - Vender produtos colhidos no mercado, respeitando o limite de ordens/turno.
 
+A apresentacao final expoe:
+  - agent(obs)            -> esperado pela Kaggle (schema novo)
+  - agent_fn(obs, config) -> alias de compatibilidade (aceito historicamente)
+"""
+
+# ----------------------------- Constantes de culturas -----------------------
+# first_yield_day, max_yield_day (colheita ideal), seed_cost, base_price
+CROPS = {
+    "WHEAT":      {"first": 2,  "max": 4,  "seed_cost": 10,  "price": 25},
+    "CARROT":     {"first": 2,  "max": 3,  "seed_cost": 20,  "price": 35},
+    "TOMATO":     {"first": 8,  "max": 11, "seed_cost": 50,  "price": 60},
+    "STRAWBERRY": {"first": 10, "max": 16, "seed_cost": 100, "price": 120},
+    "MELON":      {"first": 10, "max": 10, "seed_cost": 80,  "price": 250},
+}
+
+# Ordem de preferencia de plantio por valor (se sementes disponiveis).
+PLANT_PRIORITY = ["MELON", "STRAWBERRY", "TOMATO", "CARROT", "WHEAT"]
+
+# Animais — produzem continuamente; valor alto no longo prazo.
+ANIMALS = {
+    "GOOSE": {"buy_cost": 300, "needs": "COOP",    "product": "EGG",  "price": 50},
+    "COW":   {"buy_cost": 400, "needs": "PASTURE", "product": "MILK", "price": 160},
+    "SHEEP": {"buy_cost": 500, "needs": "PASTURE", "product": "WOOL", "price": 200},
+}
+
+# Limite de ordens de mercado por turno (default do ambiente).
+MAX_MARKET_ORDERS = 10
+
+# Limite suave do shed para acionar vendas preventivas.
+SHED_SOFT_CAP = 80
+
+
+class KaggricultureAgentV7:
     def __init__(self):
-        self.current_day = 0
+        self.last_day = -1
+
+    # ----- helpers --------------------------------------------------------
+    @staticmethod
+    def _tile_at(farm, pos):
+        """Retorna o tile na posicao [x, y] ou None se posicao invalida."""
+        if not isinstance(pos, (list, tuple)) or len(pos) != 2:
+            return None
+        x, y = pos
+        tiles = farm.get("tiles", [])
+        if not (0 <= y < len(tiles)):
+            return None
+        row = tiles[y]
+        if not isinstance(row, list) or not (0 <= x < len(row)):
+            return None
+        return row[x]
 
     @staticmethod
-    def _as_int(value, default=0):
-        """Converte com segurança para int, tratando None/tipos inválidos."""
-        try:
-            if value is None:
-                return default
-            return int(value)
-        except (TypeError, ValueError):
-            return default
+    def _is_empty_unlocked(tile):
+        """Tile plantavel: None (vazio desbloqueado)."""
+        return tile is None
 
     @staticmethod
-    def _as_dict(value):
-        return value if isinstance(value, dict) else {}
+    def _is_locked(tile):
+        return tile == "LOCKED"
 
-    def _pertile_state(self, farmer, board):
-        """
-        Lê o estado do tile atual do fazendeiro.
-        Retorna None quando o tile não existe no board (position inválida),
-        e um dict (possivelmente vazio) quando o tile existe mas está sem info.
-        """
-        if not isinstance(farmer, dict):
-            return None
-        f_pos = farmer.get("position")
-        if f_pos is None:
-            return None
-        key = str(f_pos)
-        if key not in board:
-            return None
-        raw = board.get(key)
-        return raw if isinstance(raw, dict) else {}
+    @staticmethod
+    def _is_plant(tile):
+        return isinstance(tile, dict) and tile.get("kind") == "PLANT"
 
-    def __call__(self, observation):
-        if not isinstance(observation, dict):
-            return []
+    @staticmethod
+    def _is_weed(tile):
+        return isinstance(tile, dict) and tile.get("kind") == "WEED"
 
-        actions = []
+    @staticmethod
+    def _is_animal_struct(tile):
+        return isinstance(tile, dict) and tile.get("kind") in ("COOP", "PASTURE")
 
-        # ---- 1. Controle de Turno e Dia -------------------------------------
-        turn = self._as_int(observation.get("step", 0))
-        self.current_day = turn // 24
+    # ----- logica principal ----------------------------------------------
+    def __call__(self, obs):
+        if not isinstance(obs, dict):
+            return {"farmer": ["PASS"], "hands": [], "market": []}
 
-        # ---- 2. Gestão de Mercado, Caixa e Galpão ----------------------------
-        inventory = self._as_dict(observation.get("inventory", {}))
-        coins = self._as_int(observation.get("coins", 0))
+        player = obs.get("player", 0)
+        farms = obs.get("farms", [])
+        if not isinstance(farms, list) or player >= len(farms):
+            return {"farmer": ["PASS"], "hands": [], "market": []}
 
-        # Filtra chaves inválidas de inventário
-        inv = {}
-        for k, v in inventory.items():
-            iv = self._as_int(v)
-            if iv > 0:
-                inv[k] = iv
-        total_items_in_shed = sum(inv.values())
-        shed_critical = total_items_in_shed > self.SHED_CRITICAL
-        shed_crowded = total_items_in_shed > self.SHED_SAFE_CAP
+        farm = farms[player] or {}
+        private = obs.get("private", {}) or {}
+        market = obs.get("market", {}) or {}
+        day = obs.get("day", 0)
+        step = obs.get("step", 0)
 
-        # Ocupação parcial: caso lotado, vender tudo de cada coluna para
-        # liberar espaço; caso só passe do limite por coluna, vender metade.
-        # Priorizamos vender o que vale menos primeiro para preservar
-        # culturas de alto valor (MELON/WHEAT) no galpão.
-        for item in sorted(inv.keys(), key=lambda x: self.CROP_VALUE.get(x, 0)):
-            count = inv[item]
-            if count <= 1:
-                continue
-            if item in ("FERTILIZER", "SEED_MELON", "SEED_WHEAT", "SEED_CARROT"):
-                # Não liquidar inventário de insumos; são operacionais.
-                continue
-            if shed_critical:
-                # Venda total: esvazia o shed o máximo possível.
-                actions.append(f"SELL {item} {count}")
-                inv[item] = 0
-                if len(actions) >= 6:
-                    break
-            elif shed_crowded and count > 8:
-                # Venda parcial: libera espaço sem liquidar todo o estoque.
-                half = count // 2
-                actions.append(f"SELL {item} {half}")
-                inv[item] = count - half
-            # Caso normal (shed saudável): não vende para preservar receita
-            # e deixar a colheita acumular até um lote maior/venda estratégica.
+        # Reset de flags no inicio do dia (nao usado para controle, mas mantemos
+        # last_day para possivel logica futura de scheduling).
+        if day != self.last_day:
+            self.last_day = day
 
-        # ---- Reabastecimento de sementes / fertilizante --------------------
-        # Orçamento de ações reservado para mercado evita saturar o turno.
-        if coins > self.LOW_COINS_THRESHOLD:
-            budget_left = self.BUY_BUDGET_ACTIONS
-            seed_melon = inv.get("SEED_MELON", 0)
-            seed_wheat = inv.get("SEED_WHEAT", 0)
-            seed_carrot = inv.get("SEED_CARROT", 0)
-            fertiz = inv.get("FERTILIZER", 0)
+        shed = private.get("shed", {}) or {}
+        seeds = private.get("seeds", {}) or {}
+        money = farm.get("money", 0)
+        prices = market.get("prices", {}) or {}
 
-            if seed_melon < 3 and budget_left > 0:
-                qty = min(3 - seed_melon, 2)
-                actions.append(f"BUY_SEED MELON {qty}")
-                budget_left -= 1
-            if seed_wheat < 6 and budget_left > 0:
-                qty = min(6 - seed_wheat, 5)
-                actions.append(f"BUY_SEED WHEAT {qty}")
-                budget_left -= 1
-            if seed_carrot < 4 and budget_left > 0:
-                qty = min(4 - seed_carrot, 4)
-                actions.append(f"BUY_SEED CARROT {qty}")
-                budget_left -= 1
-            if fertiz < 2 and budget_left > 0 and coins > 600:
-                actions.append("BUY FERTILIZER 2")
+        # ---- 1. Mercado ---------------------------------------------------
+        market_orders = self._build_market_orders(
+            shed=shed, seeds=seeds, money=money, prices=prices, day=day
+        )
 
-        # ---- 3. Ações na Fazenda para cada Peão/Fazendeiro ------------------
-        farmers = observation.get("units", []) or []
-        board = observation.get("board", {}) or {}
-        board = board if isinstance(board, dict) else {}
+        # ---- 2. Acao do fazendeiro principal ------------------------------
+        farmer_pos = farm.get("farmer", [0, 0])
+        tile = self._tile_at(farm, farmer_pos)
 
-        for farmer in farmers:
-            if not isinstance(farmer, dict):
-                actions.append("PASS")
+        main_action = self._decide_unit_action(
+            tile=tile, seeds=seeds, shed=shed, day=day, prices=prices,
+            farmer_pos=farmer_pos, farm=farm,
+        )
+
+        # ---- 3. Acoes dos farm hands (mesma logica) ------------------------
+        hands_pos = farm.get("hands", []) or []
+        hands_actions = []
+        for hpos in hands_pos:
+            htile = self._tile_at(farm, hpos)
+            haction = self._decide_unit_action(
+                tile=htile, seeds=seeds, shed=shed, day=day, prices=prices,
+                farmer_pos=hpos, farm=farm,
+            )
+            hands_actions.append(haction)
+
+        return {
+            "farmer": main_action,
+            "hands": hands_actions,
+            "market": market_orders[:MAX_MARKET_ORDERS],
+        }
+
+    # ----- mercado -------------------------------------------------------
+    def _build_market_orders(self, shed, seeds, money, prices, day):
+        orders = []
+
+        # (a) Vender produtos colhidos que estao no shed. Mantemos WHEAT e
+        #     FERTILIZER como insumos operacionais (nao vendidos por defeito),
+        #     exceto quando o shed esta lotado — nesse caso vende o excedente
+        #     para evitar descarte no overflow (capacidade 100).
+        total_shed = sum(shed.values()) if isinstance(shed, dict) else 0
+        force_sell = total_shed > SHED_SOFT_CAP
+
+        for item in sorted(shed.keys()):
+            qty = shed.get(item, 0)
+            if not isinstance(qty, (int, float)) or qty <= 0:
                 continue
 
-            tile = self._pertile_state(farmer, board)
-            if tile is None:
-                # Tile fora do tabuleiro / sem info -> não há nada a fazer.
-                actions.append("PASS")
+            if item == "WHEAT":
+                # Reserva de trigo para alimentar animais. Se o shed nao estiver
+                # lotado, guarda ate 20; se lotado, vende o excedente acima de 5.
+                keep = 5 if force_sell else 20
+                sell_qty = qty - keep
+                if sell_qty > 0:
+                    orders.append(["SELL", item, sell_qty])
                 continue
 
-            has_plant = bool(tile.get("has_plant"))
-            has_animal = bool(tile.get("has_animal"))
-            has_weed = bool(tile.get("has_weed"))
-            has_structure = bool(tile.get("has_structure"))
-
-            # P1: Colher planta pronta
-            if has_plant and tile.get("is_ready_to_harvest"):
-                actions.append("HARVEST")
+            if item == "FERTILIZER":
+                # Fertilizante e insumo; so vendemos quando o shed esta lotado
+                # e o estoque passa de 5.
+                if force_sell and qty > 5:
+                    orders.append(["SELL", item, qty - 5])
                 continue
 
-            # P1.1: Tratar animais (alimentar antes de coletar)
-            if has_animal:
-                if not tile.get("fed_today"):
-                    actions.append("FEED")
-                    continue
-                if tile.get("ready_to_produce"):
-                    actions.append("HARVEST")
-                    continue
+            # Produtos normais (CARROT, MELON, EGG, MILK, WOOL, ...):
+            # mantem um minimo de 3 unidades (buffer) a menos que lotado.
+            keep = 0 if force_sell else 3
+            sell_qty = qty - keep
+            if sell_qty > 0:
+                orders.append(["SELL", item, sell_qty])
 
-            # P2: Regar plantas
-            if has_plant and not tile.get("watered_today"):
-                actions.append("WATER")
+        # (b) Reabastecimento de sementes — compra so o que falta, com orcamento
+        #    controlado. Prioriza MELON, depois WHEAT (para vacas/aves), CARROT.
+        seed_targets = {"MELON": 5, "WHEAT": 8, "CARROT": 6, "TOMATO": 3,
+                         "STRAWBERRY": 3}
+        for crop in ["MELON", "WHEAT", "CARROT", "TOMATO", "STRAWBERRY"]:
+            have = seeds.get(crop, 0)
+            target = seed_targets[crop]
+            if have >= target or len(orders) >= MAX_MARKET_ORDERS:
                 continue
+            need = target - have
+            cost = CROPS[crop]["seed_cost"] * need
+            if money >= cost + 200:  # guarda margem de seguranca
+                orders.append(["BUY_SEED", crop, need])
+                money -= cost  # simulacao local de gasto p/ proximas ordens
 
-            # P2.1: Fertilizar SOMENTE culturas de alto valor
-            if has_plant and not tile.get("fertilized_recently"):
-                crop_type = tile.get("crop_type") or tile.get("plant_type")
-                if crop_type in self.HIGH_VALUE_CROPS and inv.get("FERTILIZER", 0) > 0:
-                    actions.append("FERTILIZE")
-                    continue
+        return orders
 
-            # P3: Limpar mato
-            if has_weed:
-                actions.append("DIG")
-                continue
+    # ----- acao por unidade (farmer ou hand) -----------------------------
+    def _decide_unit_action(self, tile, seeds, shed, day, prices, farmer_pos, farm):
+        # Nike Nacional: tile plantavel vazio? planta.
+        if self._is_empty_unlocked(tile):
+            return self._plant_action(seeds)
 
-            # P4: Plantar em solo limpo e vazio (rotação por valor)
-            if not has_plant and not has_weed and not has_structure:
-                plant_action = self._choose_crop_to_plant(inv)
-                if plant_action:
-                    inv[plant_action["seed"]] = max(0, inv.get(plant_action["seed"], 0) - 1)
-                    actions.append(plant_action["action"])
-                    continue
+        # Weed -> limpa.
+        if self._is_weed(tile):
+            return ["DIG"]
 
-            actions.append("PASS")
+        if self._is_plant(tile):
+            crop = tile.get("crop")
+            crop_info = CROPS.get(crop, {})
+            first_day = crop_info.get("first", 2)
+            max_day = crop_info.get("max", first_day)
+            age = day - tile.get("planted_day", day)
+            watered = bool(tile.get("watered_today"))
+            fert_until = tile.get("fertilized_until_day", -1)
+            can_fert = (crop in ("MELON", "STRAWBERRY", "TOMATO", "CARROT", "WHEAT")
+                        and fert_until < day and shed.get("FERTILIZER", 0) > 0)
+            is_ongoing = crop in ("TOMATO", "STRAWBERRY")
 
-        return actions
+            # Colhe imediatamente ao atingir max_yield_day (lucro maximo).
+            if age >= max_day:
+                return ["HARVEST"]
 
-    def _choose_crop_to_plant(self, inv):
-        """
-        Seleciona a cultura de maior valor disponível em sementes.
-        Fallback na rotação dia%3 / dia%2 quando não há sementes em estoque.
-        """
-        # Preferência por valor: MELON > WHEAT > CARROT
-        if inv.get("SEED_MELON", 0) > 0:
-            return {"action": "PLANT MELON", "seed": "SEED_MELON"}
-        if inv.get("SEED_WHEAT", 0) > 0:
-            return {"action": "PLANT WHEAT", "seed": "SEED_WHEAT"}
-        if inv.get("SEED_CARROT", 0) > 0:
-            return {"action": "PLANT CARROT", "seed": "SEED_CARROT"}
+            # Ja produz (passou do first_day):
+            # - ongoing: colhe agora (continuara produzindo);
+            # - one-time: rega/fertiliza para ganhar bonus, so colhe no max.
+            if age >= first_day:
+                if is_ongoing:
+                    # Ongoing colhe assim que produz, ja tem yield_units.
+                    return ["HARVEST"]
+                # one-time: tenta melhorar o rendimento antes de colher.
+                if not watered:
+                    return ["WATER"]
+                if can_fert and crop in ("MELON", "STRAWBERRY"):
+                    return ["FERTILIZE"]
+                # Ja regado (e fertilizado se possivel) e ainda falta um
+                # dia ou mais p/ max -> espera. Se faltar <=1, ja colhemos.
+                if max_day - age <= 1:
+                    return ["HARVEST"]
+                return ["PASS"]
 
-        # Sem sementes no inventário: rotação baseada no dia
-        if self.current_day % 3 == 0:
-            return {"action": "PLANT MELON", "seed": "SEED_MELON"}
-        elif self.current_day % 2 == 0:
-            return {"action": "PLANT WHEAT", "seed": "SEED_WHEAT"}
-        return {"action": "PLANT CARROT", "seed": "SEED_CARROT"}
+            # Planta jovem (antes de first_day): regar todo dia e essencial.
+            if not watered:
+                return ["WATER"]
+            # Fertiliza jovens de alto valor, se houver insumo.
+            if can_fert and crop in ("MELON", "STRAWBERRY"):
+                return ["FERTILIZE"]
+            return ["PASS"]
+
+        if self._is_animal_struct(tile):
+            # Estrutura de animal: alimenta, cuida, colhe.
+            if tile.get("animal") is None:
+                # Sem animal — estrutura vazia. Nao ha acao alem de PASS.
+                return ["PASS"]
+            if not tile.get("fed_today") and shed.get("WHEAT", 0) > 0:
+                return ["FEED"]
+            if tile.get("fertilizer_available"):
+                return ["COLLECT_FERTILIZER"]
+            if not tile.get("cared_today"):
+                return ["CARE"]
+            # Animais produzem em intervalos: so colhe se houver yield_units.
+            if tile.get("yield_units", 0) > 0:
+                return ["HARVEST"]
+            return ["PASS"]
+
+        return ["PASS"]
+
+    def _plant_action(self, seeds):
+        """Escolhe a cultura de maior valor com sementes disponiveis."""
+        for crop in PLANT_PRIORITY:
+            if seeds.get(crop, 0) > 0:
+                return ["PLANT", crop]
+        # Sem sementes — PASS.
+        return ["PASS"]
 
 
-agent = KaggricultureAgentV6()
+# ----------------------------- Instancia global -----------------------------
+agent = KaggricultureAgentV7()
 
 
+# ----------------------------- Funcoes publicas ----------------------------
 def agent_fn(observation, configuration=None):
+    """Alias de compatibilidade — algumas versoes da Kaggle chamam agent_fn."""
+    return agent(observation)
+
+
+def main_agent(observation, configuration=None):
+    """Outro alias — algumas execucoes esperam main_agent."""
     return agent(observation)

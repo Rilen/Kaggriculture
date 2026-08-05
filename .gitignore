@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Kaggle downloads / dados locais da competição
+.kaggle_dl/
+
+# Credenciais
+.kaggle/
+*token*
+access_token
+kaggle.json
+
+# Ambiente
+.env
+.venv/
+venv/
