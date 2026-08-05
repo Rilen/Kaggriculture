@@ -5,7 +5,7 @@
 ![License](https://img.shields.io/badge/License-MIT-green?logo=open-source-initiative&logoColor=white)
 ![Status](https://img.shields.io/badge/Status-Active-brightgreen?logo=statuspage&logoColor=white)
 ![Score](https://img.shields.io/badge/Skill_Rating-390.3-success?logo=trending&logoColor=white)
-![Version](https://img.shields.io/badge/Current_Version-v7-blueviolet?logo=git&logoColor=white)
+![Version](https://img.shields.io/badge/Current_Version-v9-blueviolet?logo=git&logoColor=white)
 
 > Um agente autônomo em Python, desenvolvido iterativamente para a competição de simulação **Kaggriculture** da Kaggle. Projeto construído com auxílio do **KiloCode CLI** e versionado via Git.
 
@@ -48,7 +48,7 @@ Cold start: fazenda vazia, 1 fazendeiro principal e **US$ 3.000** de capital ini
 
 ## 📈 Histórico de Evolução e Versões
 
-O agente atravessou sete iterações principais. As versões **v1–v6** foram construídas contra um schema de observação assumido (não o oficial da competição), o que resultou em grande parte das ações sendo silenciosamente invalidadas (`no-ops`) pela engine — mesmo assim, ainda jogaram e ganhrarm algum skill rating. A **v7** é a primeira reescrita contra o schema documentado, abrindo espaço para integração completa de todos os recursos do jogo.
+O agente atravessou nove iterações principais. As versões **v1–v6** foram construídas contra um schema de observação assumido (não o oficial da competição), o que resultou em grande parte das ações sendo silenciosamente invalidadas (`no-ops`) pela engine. A **v7** é a primeira reescrita contra o schema documentado. A **v8** introduziu BFS para pathfinding e contratação de peões. A **v9** adiciona táticas avançadas de espionagem, flush noturno e horizonte de eventos.
 
 | Versão | Estratégia principal | Ações-chave introduzidas | Skill rating | Tendência |
 |:------:|----------------------|---------------------------|:------------:|:--------:|
@@ -58,11 +58,13 @@ O agente atravessou sete iterações principais. As versões **v1–v6** foram c
 | **v4** | Compra ativa de sementes e lógica automatizada de uso de fertilizantes. | `BUY_SEED` + `FERTILIZE` | `263.6` | — |
 | **v5** | Otimização de fluxo de caixa, estoque de trigo e foco expandido em Melão. | Reabastecimento condicional | `225.4` | — |
 | **v6** | Venda curativa de overflow, plantio por valor, fertilizante reservado p/ Melão, correção de bug do tile vazio. | Threshold duplo shed + parse robusto | `300.6` | — |
-| **v7** *(Atual)* ⭐ | **Reescrita completa contra o schema oficial** — novas 5 culturas, pecuária completa (`FEED`/`CARE`/`COLLECT_FERTILIZER`), vendas com reserva, plantio por valor MEL>STR>TOM>CAR>WHE. | Schema oficial + decisões one-time vs ongoing + manutenção de animais | **`390.3`** | — |
+| **v7** | **Reescrita completa contra o schema oficial** — 5 culturas, pecuária completa, vendas com reserva. | Schema oficial + decisões one-time vs ongoing | **`390.3`** | ▲ |
+| **v8** | BFS pathfinding, expansão agressiva, contratação inteligente de peões, construção de estruturas. | `BUILD_COOP`/`BUILD_PASTURE` + `HIRE` + `BUY_LAND` + BFS | TBD | — |
+| **v9** *(Atual)* ⭐ | **Táticas Avançadas**: Espionagem industrial, Horizonte de Eventos (corte de plantio), Flush Noturno preventivo. | Espionagem de oponente + corte fim-de-temporada + flush hour≥22 | TBD | — |
 
-> 🔎 **Nota técnica:** skill rating é um valor Elo-like. A relação com "uma versão mais complexa = mais rating" **não é linear** — depende de quem o bot enfrenta naquele momento. Scores aqui são o rating **publicado** pela Kaggle no leaderboard, não o desempenho direto de moedas. A v7 é a primeira versão a operar contra o schema autêntico, capturando recursos antes inacessíveis.
+> 🔎 **Nota técnica:** skill rating é um valor Elo-like. A relação com "uma versão mais complexa = mais rating" **não é linear** — depende de quem o bot enfrenta naquele momento. Scores aqui são o rating **publicado** pela Kaggle no leaderboard, não o desempenho direto de moedas.
 
-> 🏆 **Melhor skill rating apurado: v7 = `390.3`** (máximo histórico). A reescrita contra o schema oficial (`farms`/`tiles`/`private`/`market`) foi decisiva: saiu de 300.6 (v6) para 390.3 (+30% de rating) ao integrar pecuária completa, fertilizante, culturas ongoing (Tomato/Strawberry) e vendas estrategicamente limitadas.
+> 🏆 **Melhor skill rating apurado: v7 = `390.3`** (máximo histórico). A reescrita contra o schema oficial foi decisiva: saiu de 300.6 (v6) para 390.3 (+30% de rating).
 
 ### 🔍 Detalhamento das Versões
 
@@ -135,16 +137,65 @@ Otimização do reabastecimento condicional de sementes, com prioridade a Melão
 **Compatibilidade**: mantem os aliases <code>agent()</code>, <code>agent_fn(obs, configuration)</code> e <code>main_agent(obs, configuration)</code> para garantir aceitação por variações do runtime Kaggle.
 </details>
 
+<details>
+<summary><b>v8 — BFS + Expansao + Pecuaria + Arbitragem Municipal</b> <i>(Skill: TBD)</i></summary>
+
+**Pathfinding com BFS:**
+- <code>_bfs_nearest(start, condition, farm, exclude)</code>: varredura em largura a partir da posição atual, retornando direção do primeiro passo para o alvo mais próximo que satisfaz a condição.
+- <code>_build_move_priorities()</code>: 8 lambdas de prioridade ordenada (água → comida → colheita → fertilizante → coleta_fert → care → place_animal → weed → plantio), cada uma servindo como <code>condition</code> para o BFS.
+- Evita overbooking com <code>assigned</code> set, impedindo que dois peões disputem o mesmo tile.
+
+**Construção e Expansão:**
+- <code>_get_build_priority()</code>: constrói COOP se 0 gansos + 0 coops vagos (dia<5), ou se <2 gansos com animais comprados (dia<10). Constrói PASTURE quando há ≥2 gansos e 0 vacas (dia≥8).
+- <code>BUY_LAND</code> quando <code>money > 1500 × quadrantes_desbloqueados</code> e há quadrantes a comprar.
+- <code>HIRE</code> quando <code>urgent_tasks > 12</code> e <code>money > 500</code> e sem peões contratados.
+
+**Arbitragem Municipal:**
+- Monitoramento de preços via <code>_track_prices()</code> (histórico rolling de 10 passos).
+- Utiliza <code>SHOP_DEMAND</code> mapeado para referência de quais lojas consomem quais produtos.
+
+**Pecuária completa:**
+- Suporte a GOOSE/COW/SHEEP com <code>PICKUP</code> do shed, <code>PLACE</code> na estrutura correta, <code>FEED</code> (consome WHEAT do shed), <code>COLLECT_FERTILIZER</code>, <code>CARE</code>, <code>HARVEST</code>.
+- Worker inventory tracking para decidir entre PICKUP/DROP/PLACE.
+</details>
+
+<details>
+<summary><b>v9 — Horizonte de Eventos + Espionagem + Flush Noturno + Fix LSP</b> <i>(Skill: TBD)</i> ⭐ — <i>versão atual</i></summary>
+
+> A versão atual, presente no arquivo <code>submission.py</code>.
+
+**Tática 1 — Horizonte de Eventos (Corte de Plantio):**
+- Método estático <code>_get_valid_crops(day, op_flooding_melon=False)</code> consolida as janelas de plantio em um único ponto de verdade.
+- Culturas só são plantadas se houver tempo hábil para colher antes do fim da temporada: MELON até dia 19, STRAWBERRY até dia 18, TOMATO até dia 21, WHEAT até dia 25, CARROT até dia 26.
+- Aplicado tanto nas ordens de compra de sementes (<code>_build_market_orders</code>) quanto na ação de plantio (<code>_plant_action</code>).
+
+**Tática 2 — Espionagem Industrial:**
+- <code>_build_market_orders</code> inspeciona a fazenda do oponente (<code>op_farm</code>) contando melões plantados.
+- Se <code>op_melons > 8</code> (oponente inundando o mercado de melão), o agente vende **todo** o estoque de MELON imediatamente, antes que o preço desabe.
+- Também bloqueia novas compras de semente de MELON quando o oponente está floodando.
+
+**Tática 3 — Flush Noturno Preventivo:**
+- Detecta <code>hour >= 22</code> e <code>projected_shed >= 95</code> (shed + inventórios dos peões): ativa <code>panic_flush</code>.
+- Em pânico, mantém apenas 2 WHEAT e 0 FERTILIZER; vende todo o resto.
+- Fora de pânico, se <code>shed > 75</code> (soft cap), força venda com reservas reduzidas (5 WHEAT, 5 FERTILIZER).
+
+**Correções de Código (Fix LSP):**
+- <code>self.animals_bought</code> agora é incrementado em cada <code>PICKUP</code> de animal do shed, destravando a lógica de construção de COOPs adicionais.
+- Variável não utilizada <code>town_shops</code> removida.
+- Lógica <code>valid_crops</code> extraída para <code>_get_valid_crops()</code>, eliminando duplicação.
+</details>
+
 ---
 
 ## 🧠 Arquitetura e Fluxo do Agente
 
-O agente está encapsulado na classe `KaggricultureAgentV7` (em `submission.py`) e opera como uma função de estado → ações, invocada pela Kaggle a cada turno, retornando o dict oficial `{"farmer": [...], "hands": [[...], ...], "market": [[...], ...]}`.
+O agente está encapsulado na classe `KaggricultureAgentV9` (em `submission.py`) e opera como uma função de estado → ações, invocada pela Kaggle a cada turno, retornando o dict oficial `{"farmer": [...], "hands": [[...], ...], "market": [[...], ...]}`.
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
 │   observation (schema oficial Kaggle)                       │
 │   farms[player].tiles[y][x], farmer, hands                  │
+│   farms[1-player] (espionagem)                              │
 │   private.shed, private.seeds, private.inventories          │
 │   market.prices, market.inventory, town.unlocked_shops       │
 └──────────────────────────────┬──────────────────────────────┘
@@ -155,32 +206,41 @@ O agente está encapsulado na classe `KaggricultureAgentV7` (em `submission.py`)
         │  • player, day, hour, step               │
         │  • farms[player].money                   │
         │  • private.shed / private.seeds          │
-        │  • tile = farms[player].tiles[y][x]     │
+        │  • scan_tiles → water/feed/harvest tasks │
+        │  • op_farm (espionagem do oponente)     │
         └──────────────────────┬───────────────────┘
                                ▼
         ┌──────────────────────────────────────────┐
         │     2. GESTÃO DE MERCADO & GALPÃO        │
-        │  • SELL produtos (reserva WHEAT/FERT)   │
-        │  • SELL excedente se shed > 80          │
-        │  • BUY_SEED reabastece alvos por cultura│
-        │  • max 10 orders/turno                  │
+        │  • Tática 3: Flush Noturno (hour≥22)     │
+        │  • Tática 2: Espionagem (op_melons>8)    │
+        │  • Tática 1: Horizonte de Eventos        │
+        │     (corte de sementes por deadline)     │
+        │  • SELL produtos (reserva dinâmica)      │
+        │  • BUY_SEED (só culturas válidas)        │
+        │  • HIRE se urgente + BUY_LAND expansão   │
+        │  • max 10 orders/turno                   │
         └──────────────────────┬───────────────────┘
                                ▼
         ┌──────────────────────────────────────────┐
         │    3. TOMADA DE AÇÃO (por unidade)       │
         │  farmer + cada hand independente         │
+        │  BFS pathfinding p/ tile mais próximo    │
         │                                          │
-        │  P1 -> EMPTY TILE -> PLANT por valor     │
-        │     (MEL > STR > TOM > CAR > WHE)       │
+        │  P0 -> EMPTY TILE -> BUILD_COOP/PASTURE  │
+        │  P1 -> EMPTY TILE -> PLANT (prioridade)  │
         │  P2 -> WEED -> DIG                       │
         │  P3 -> PLANT one-time:                   │
         │      age>=max -> HARVEST                 │
         │      first<=age<max: WATER/FERTILIZE    │
         │  P3b -> PLANT ongoing (TOM/STR):        │
         │      age>=first -> HARVEST              │
-        │  P4 -> ANIMAL (COOP/PASTURE + animal):  │
-        │      FEED -> COLLECT_FERTILIZER         │
+        │  P4 -> ANIMAL (COOP/PASTURE):           │
+        │      PLACE -> FEED -> COLLECT_FERT      │
         │      -> CARE -> HARVEST                  │
+        │  P5 -> SHED ADJACENT:                    │
+        │      PICKUP animal / DROP overflow       │
+        │  fallback -> BFS para próxima tarefa     │
         │  fallback -> PASS                        │
         └──────────────────────┬───────────────────┘
                                ▼
@@ -196,54 +256,63 @@ O agente está encapsulado na classe `KaggricultureAgentV7` (em `submission.py`)
 ```python
 player = obs["player"]
 farm = obs["farms"][player]
+op_farm = obs["farms"][1 - player]   # espionagem
 private = obs["private"]
-money = farm["money"]           # saldo (coins) - vence quem tem mais
-tile = farm["tiles"][y][x]       # None | "LOCKED" | dict(PLANT/WEED/COOP/PASTURE)
-shed = private["shed"]          # produtos colhidos + fertilizer
-seeds = private["seeds"]        # sementes (consumidas por PLANT)
+money = farm["money"]
+tile = farm["tiles"][y][x]           # None | "LOCKED" | dict
+shed = private["shed"]
+seeds = private["seeds"]
+inventories = private["inventories"]
 prices = obs["market"]["prices"]
 day = obs["day"]; hour = obs["hour"]
 ```
 Cada tile é interpretado pelo campo `kind` (`"PLANT"`, `"WEED"`, `"COOP"`/`"PASTURE"`), com `None` representando solo livre desbloqueado e `"LOCKED"` representando quadrante não comprado.
 
-#### 2. Gestão de Mercado e Galpão
-```python
-total_shed = sum(shed.values())
-force_sell = total_shed > 80   # venda emergencial evita overflow (cap=100)
-```
-- **Venda seletiva:** mantem WHEAT (estoque p/ alimentar animais) acima de 20 unidades (ou 5 se lotado) e FERTILIZER acima de 5 (se lotado); demais produtos guardam 3 unidades como buffer.
-- **Reabastecimento:** compra sementes conforme alvo por cultura (Melon 5, Wheat 8, Carrot 6, Tomato 3, Strawberry 3), mantendo margem de ≥ 200 moedas de reserva após a compra.
+#### 2. Gestão de Mercado e Galpão (com Táticas Avançadas)
 
-#### 3. Tomada de Ação na Fazenda (prioridades encadeadas)
+**Tática 1 — Horizonte de Eventos:**
+```python
+valid_crops = self._get_valid_crops(day, op_flooding_melon)
+# MELON só até dia 19, STRAWBERRY até 18, TOMATO até 21, etc.
+```
+
+**Tática 2 — Espionagem Industrial:**
+```python
+op_melons = count(op_farm tiles where crop == "MELON")
+op_flooding_melon = op_melons > 8
+if op_flooding_melon: vende TODO o MELON e bloqueia compra
+```
+
+**Tática 3 — Flush Noturno:**
+```python
+projected_shed = total_shed + sum(worker inventories)
+panic_flush = (hour >= 22 and projected_shed >= 95)
+force_sell = panic_flush or (total_shed > SHED_SOFT_CAP)  # 75
+```
+- **Venda seletiva:** em pânico mantém só 2 WHEAT; força venda mantém 5 WHEAT e 5 FERTILIZER; normal mantém buffer proporcional a animais.
+- **Reabastecimento:** compra sementes conforme alvo por cultura, apenas para culturas em `valid_crops`.
+- **Reabastecimento:** compra sementes conforme alvo por cultura (Melon 4, Wheat 6, Carrot 4, Tomato 2, Strawberry 2), apenas para culturas em `valid_crops`, mantendo margem de ≥ 200 moedas.
+
+#### 3. Tomada de Ação na Fazenda (prioridades encadeadas com BFS)
 
 | Ordem | Ação | Condição de disparo |
 |:-----:|------|---------------------|
-| P1 | `PLANT` | Tile `None`: escolhe cultura de maior valor disponível em `seeds` |
+| P0 | `BUILD_COOP` / `BUILD_PASTURE` | Tile `None`: build se condições de `_get_build_priority()` satisfeitas |
+| P1 | `PLANT` | Tile `None`: escolhe cultura de maior valor disponível em `seeds`, só se `crop in valid_crops` |
 | P2 | `DIG` | Tile `kind == "WEED"` |
 | P3 | `WATER` | Planta presente e `!watered_today` |
-| P3b | `FERTILIZE` | Planta de alto valor (MEL/STR), não fertilizada hoje, e `shed[FERTILIZER] > 0` |
+| P3b | `FERTILIZE` | Planta de alto valor (MEL/STR), não fertilizada hoje, `shed[FERTILIZER] > 0` |
 | P4 | `HARVEST` | Planta one-time com `age >= max_yield_day` (ou ongoing com `age >= first` e `yield_units > 0`) |
-| P5 | `FEED` | Animal presente, `!fed_today`, `shed[WHEAT] > 0` |
-| P5b | `COLLECT_FERTILIZER` | Animal com `fertilizer_available == True` |
-| P5c | `CARE` | Animal com `!cared_today` |
-| P5d | `HARVEST` | Animal com `yield_units > 0` |
-| — | `PASS` | Nenhuma das condições (incl. `LOCKED`) |
+| P5 | `FEED` / `COLLECT_FERTILIZER` / `CARE` / `HARVEST` | Animal presente no tile; prioridade FEED → COLLECT_FERT → CARE → HARVEST |
+| P6 | `PICKUP` / `DROP` | Worker adjacente ao shed: PICKUP de animal sem inventory, DROP se inventory > 5 |
+| — | `BFS movement` | Nenhuma ação no tile atual: BFS para o tile mais próximo com tarefa pendente |
+| — | `PASS` | Nenhuma condição atendida (incl. `LOCKED`) |
 
 > 🔬 **Culturas one-time vs ongoing**: para Wheat/Carrot/Melon, o agente adia a colheita até `max_yield_day` para capturar o bônus máximo; para Tomato/Strawberry, colhe assim que produz (pois continuam produzindo em intervalos fixos).
 
-#### 3. Tomada de Ação na Fazenda (prioridades encadeadas)
+> 🕵️ **Espionagem**: se oponente tem >8 MELONs plantados, vende-se TODO o estoque de MELON imediatamente e bloqueia-se novas compras da semente.
 
-| Ordem | Ação | Condição de disparo |
-|:-----:|------|---------------------|
-| P1 | `HARVEST` | Planta presente e pronta para colher |
-| P1.1 | `FEED` / `HARVEST` | Tile com animal; alimenta se ainda não foi alimentado, colhe se pronto para produzir |
-| P2 | `WATER` | Planta presente e sem água no dia |
-| P2.1 | `FERTILIZE` | Planta presente, não fertilizada recentemente, e fertilizante no inventário |
-| P3 | `DIG` | Presença de mato (*weed*) no tile |
-| P4 | `PLANT` | Tile vazio (sem planta/estrutura/mato); escolhe a cultura de maior valor disponível em sementes |
-| — | `PASS` | Nada a fazer neste turno |
-
-> 🔁 A seleção de plantio prioriza **valor**: Melão > Trigo > Cenoura, conforme disponibilidade de sementes. Quando não há sementes em estoque, cai na rotação por dia (Melão a cada 3 dias, Trigo em dias pares, Cenoura nos demais).
+> 🌙 **Flush Noturno**: a partir das 22h, se shed + inventórios ≥ 95 itens, ativa `panic_flush` vendendo tudo exceto 2 WHEAT.
 
 ---
 
@@ -280,12 +349,12 @@ A partir da raiz do repositório:
 kaggle competitions submit -c kaggriculture -f submission.py -m "Mensagem descritiva da versão"
 ```
 
-Exemplo — reprodutível da última submissão (v7):
+Exemplo — reprodutível da última submissão (v9):
 
 ```bash
 kaggle competitions submit -c kaggriculture \
   -f submission.py \
-  -m "Versão 7: Reescrita completa usando schema oficial - plantio por valor, pecuaria completa, vendas com reserva."
+  -m "v9 Masterpiece: Espionagem Industrial + Corte Fim-de-Temporada + Flush Noturno + Fix LSP"
 ```
 
 ### 3. Monitoramento de Submissões
