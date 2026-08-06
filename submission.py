@@ -84,6 +84,10 @@ class OpeningBook:
     def __init__(self):
         self.done = False
 
+    def is_active(self, day):
+        """Retorna True enquanto o Opening Book deve controlar o turno (Dia 0)."""
+        return day == 0 and not self.done
+
     # -- Helpers de Navegacao e Tiles --
 
     @staticmethod
