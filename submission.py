@@ -116,7 +116,7 @@ class KaggricultureAgentV9:
                 kind = tile.get("kind")
                 if kind == "PLANT":
                     crop = tile.get("crop")
-                    info = CROPS.get(crop, {})
+                    info = CROPS.get(crop if isinstance(crop, str) else "", {})
                     age = day - tile.get("planted_day", day)
                     if age >= info.get("max", 2) or (crop in ("TOMATO", "STRAWBERRY") and age >= info.get("first", 2) and tile.get("yield_units", 0) > 0):
                         tasks["harvest_ready"].append((x, y))
@@ -140,7 +140,7 @@ class KaggricultureAgentV9:
 
         if isinstance(tile, dict) and tile.get("kind") == "PLANT":
             crop = tile.get("crop")
-            crop_info = CROPS.get(crop, {})
+            crop_info = CROPS.get(crop if isinstance(crop, str) else "", {})
             first_day = crop_info.get("first", 2)
             max_day = crop_info.get("max", first_day)
             age = day - tile.get("planted_day", day)
@@ -182,7 +182,7 @@ class KaggricultureAgentV9:
         return [
             lambda tile, x, y: isinstance(tile, dict) and tile.get("kind") == "PLANT" and (x, y) not in self.watered_this_day and not tile.get("watered_today"),
             lambda tile, x, y: isinstance(tile, dict) and tile.get("kind") in ("COOP", "PASTURE") and (x, y) not in self.fed_this_day and tile.get("animal") and not tile.get("fed_today") and shed.get("WHEAT", 0) > 0,
-            lambda tile, x, y: (isinstance(tile, dict) and tile.get("kind") == "PLANT" and (day - tile.get("planted_day", day)) >= CROPS.get(tile.get("crop"), {}).get("max", 2)) or (isinstance(tile, dict) and tile.get("kind") in ("COOP", "PASTURE", "PLANT") and tile.get("yield_units", 0) > 0),
+            lambda tile, x, y: (isinstance(tile, dict) and tile.get("kind") == "PLANT" and (day - tile.get("planted_day", day)) >= CROPS.get(str(tile.get("crop") or ""), {}).get("max", 2)) or (isinstance(tile, dict) and tile.get("kind") in ("COOP", "PASTURE", "PLANT") and tile.get("yield_units", 0) > 0),
             lambda tile, x, y: isinstance(tile, dict) and tile.get("kind") == "PLANT" and tile.get("crop") in ("MELON", "STRAWBERRY") and tile.get("fertilized_until_day", -1) < day and shed.get("FERTILIZER", 0) > 0,
             lambda tile, x, y: isinstance(tile, dict) and tile.get("kind") in ("COOP", "PASTURE") and tile.get("fertilizer_available"),
             lambda tile, x, y: isinstance(tile, dict) and tile.get("kind") in ("COOP", "PASTURE") and tile.get("animal") and not tile.get("cared_today"),
@@ -331,7 +331,7 @@ class KaggricultureAgentV9:
                 action = self._decide_tile_action(tile, shed, seeds, day, winv, wpos)
                 if action and action[0] != "PASS": return action
 
-            if not self._is_empty_unlocked(tile):
+            if tile is not None and not self._is_empty_unlocked(tile):
                 if self._is_animal_struct(tile) and tile.get("animal") is None and winv:
                     for item, qty in winv.items():
                         if qty > 0 and item in ANIMALS and ANIMALS[item]["needs"] == tile.get("kind"):
