@@ -1,5 +1,5 @@
 """
-Kaggriculture Autonomous AI Agent — Version 13 (v13)
+Kaggriculture Autonomous AI Agent — Version 14 (v14)
 
 [v8]  BFS + Expansao + Pecuaria + Arbitragem Municipal
 [v9]  Horizonte de Eventos + Espionagem do Oponente + Hour 23 Flush
@@ -7,16 +7,14 @@ Kaggriculture Autonomous AI Agent — Version 13 (v13)
       seed_targets escalados por quadrante, reserva de capital dinamica
 [v11] Fixes do Forum: Anti-Weed (PASS em hora>=23), venda de
       FERTILIZER excedente (>10 unidades), Fixed Asset Meta acelerado
-[v12] Deterministic Opening Book: "Tall Meta" (Top 1 Global, 128k+ pts),
-      FSM com GOLDEN_DUMP / SUPPLY_HACK / INFRA_RUSH / IGNITION
-[v13] "Wide + Tall Meta" (analise replay Kaileh57 vs Dahoui, ID 90465576):
-      BUY_LAND na Hora 1 (desbloqueia NE imediatamente), 2a onda de HIRE
-      na Hora 2 (total 9-10 peoes), sementes de TRIGO+CARROT em massa nos
-      dois quadrantes. FEED desacoplado do inventario do ator (shed-based).
+[v12] Deterministic Opening Book: "Tall Meta" (Top 1 Global, 128k+ pts)
+[v13] "Wide + Tall Meta": BUY_LAND na Hora 1, WHEAT/CARROT massivo
+[v14] "Wide + Tall" Refined: BUY_LAND na Hora 0, HIRE otimizado (7 hands),
+      Recontratacao diaria agressiva, DROP proativo, prioridades rebalanceadas.
 
       Fases do Opening Book (Dia 0):
-        Hour 0-1  | GOLDEN_DUMP  : BUY_LAND + 5x HIRE + COW/SHEEP + sementes
-        Hour 2    | SUPPLY_HACK  : 4x HIRE + mais sementes (WHEAT+CARROT)
+        Hour 0-1  | GOLDEN_DUMP  : BUY_LAND + 4x HIRE + COW/SHEEP + sementes
+        Hour 2    | SUPPLY_HACK  : 3x HIRE + mais sementes
         Hour 3-5  | INFRA_RUSH   : BUILD_PASTURE + PLACE animais (NW+NE)
         Hour 6-9  | IGNITION     : FEED/CARE animais + PLANT em ambos quadrantes
         Hour >=10 | COMPLETE     : Transicao para engine dinamica v11
@@ -150,47 +148,34 @@ class OpeningBook:
     @staticmethod
     def _market_golden_dump():
         """
-        Step 1 (hora 0-1): Golden Dump v13 — "Wide + Tall".
+        Step 1 (hora 0-1): Golden Dump v14.
 
-        MUDANCAS vs v12:
-          + BUY_LAND agora esta na Hora 1 (dobra espaco NW->NW+NE imediatamente).
-          + BUY_SEED WHEAT 8 (mais trigo para cobrir os 50 tiles).
-          + BUY_SEED CARROT 4 (ciclo curto, demanda PET_CAFE + FARMERS_MARKET).
-          - Reduzido MELON para 4 (apenas para marcar valor premium no NW).
-          COW e SHEEP permanecem para o Fixed Asset Engine.
-        Total: 10 ordens (teto exato do MAX_MARKET_ORDERS).
+        BUY_LAND na Hora 0 (instant-unlock NE para o Hand 0 nao ficar preso).
+        Reduzido para 4x HIRE para preservar capital para sementes.
         """
         return [
-            ["BUY_LAND"],                    # Desbloqueia NE na Hora 1
+            ["BUY_LAND"],
             ["HIRE"],
             ["HIRE"],
             ["HIRE"],
-            ["HIRE"],
-            ["HIRE"],                         # 1a onda: 5x HIRE
+            ["HIRE"],                         # 1a onda: 4x HIRE
             ["BUY_ANIMAL", "COW",   2],
-            ["BUY_ANIMAL", "SHEEP", 2],
-            ["BUY_SEED",   "WHEAT", 8],
+            ["BUY_ANIMAL", "SHEEP", 1],       # Apenas 1 sheep para econ
+            ["BUY_SEED",   "WHEAT", 10],
             ["BUY_SEED",   "CARROT", 4],
+            ["BUY_SEED",   "MELON", 2],
         ]   # = 10 ordens
 
     @staticmethod
     def _market_supply_hack():
         """
-        Step 2 (hora 2): 2a Onda de Contratacao + Sementes para NE.
-
-        MUDANCAS vs v12:
-          - Remove BUY_PRODUCT WHEAT (nao necessario: FEED usa shed)
-          + 4x HIRE adicionais (total 9 peoes + fazendeiro = 10 trabalhadores)
-          + BUY_SEED WHEAT 4 e MELON 4 para cobrir os tiles NE recem-abertos.
-        Total: 7 ordens.
+        Step 2 (hora 2): 2a Onda de Contratacao + Sementes.
         """
         return [
             ["HIRE"],
             ["HIRE"],
-            ["HIRE"],
-            ["HIRE"],                         # 2a onda: +4 HIRE (total 9)
+            ["HIRE"],                         # 2a onda: +3 HIRE (total 7)
             ["BUY_SEED", "WHEAT", 4],
-            ["BUY_SEED", "MELON", 4],
             ["BUY_SEED", "CARROT", 4],
         ]
 
@@ -236,7 +221,12 @@ class OpeningBook:
                 for atype in ("COW", "SHEEP"):
                     if atype in carrying:           # guard: tem o animal no inv
                         return ["PLACE", atype]
-                return ["PASS"]                    # sem animal -> aguarda
+                
+                # Nao carrega animal: procura tile vazio para construir PASTURE
+                target = self._find_empty_tile(tiles, top_half_only=True)
+                if target and target != (x, y):
+                    return self._navigate(pos, target)
+                return ["PASS"]
 
             # Esta carregando animal -> navegar ate pastagem vazia mais proxima
             if carrying:
@@ -352,12 +342,12 @@ class OpeningBook:
 
 
 # =============================================================================
-# ENGINE DINAMICO -- Mid/Late Game (v11, com todos os hotfixes)
+# ENGINE DINAMICO -- Mid/Late Game (v14, com todos os hotfixes)
 # =============================================================================
-class KaggricultureAgentV13:
+class KaggricultureAgentV14:
     """
-    Agente principal v13 -- "Wide + Tall Meta".
-    - Dia 0, hora < 10  -> OpeningBook v13 (BUY_LAND Hora1 + 9 peoes + sementes NW+NE)
+    Agente principal v14 -- "Wide + Tall Meta" Refined.
+    - Dia 0, hora < 10  -> OpeningBook v14 (BUY_LAND Hora0 + 7 peoes + sementes NW+NE)
     - Dia 0, hora >= 10 e demais dias -> Engine dinamica v11 com hotfixes:
         Anti-Weed Lock  : PASS em vez de PLANT se hour >= 23
         Fertilizer Sell : vender FERTILIZER excedente (manter <= 10 unidades)
@@ -466,9 +456,9 @@ class KaggricultureAgentV13:
 
     def _decide_tile_action(self, tile, shed, seeds, day, worker_inventory=None, pos=None, hour=0):
         if self._is_empty_unlocked(tile):
-            # FIX v11: Semente plantada sem agua na mesma hora vira mato na madrugada.
-            # Hora 23 nao tem mais turns no dia para regar -- bloqueia o plantio!
-            if hour >= 23:
+            # FIX v14: Semente plantada na hora 22 pode virar mato se nao houver water.
+            # Bloqueia PLANT se hour >= 22 (garante ao menos 1 turn para WATER).
+            if hour >= 22:
                 return ["PASS"]
             return self._plant_action(seeds, day)
 
@@ -521,30 +511,50 @@ class KaggricultureAgentV13:
 
     def _build_move_priorities(self, shed, day, worker_inventory):
         return [
+            # 1. Proactive DROP: Se inventario > 10, navegar ate shed.
+            lambda tile, x, y: (sum(worker_inventory.values()) > 10 if worker_inventory else False) and self._is_shed_adjacent((x, y)),
+            
+            # 2. Water
             lambda tile, x, y: (isinstance(tile, dict) and tile.get("kind") == "PLANT"
                                  and (x, y) not in self.watered_this_day
                                  and not tile.get("watered_today")),
+            
+            # 3. CARE (Prioridade elevada - v14)
+            lambda tile, x, y: (isinstance(tile, dict) and tile.get("kind") in ("COOP", "PASTURE")
+                                 and tile.get("animal") and not tile.get("cared_today")),
+            
+            # 4. FEED
             lambda tile, x, y: (isinstance(tile, dict) and tile.get("kind") in ("COOP", "PASTURE")
                                  and (x, y) not in self.fed_this_day
                                  and tile.get("animal") and not tile.get("fed_today")
                                  and shed.get("WHEAT", 0) > 0),
+            
+            # 5. HARVEST
             lambda tile, x, y: ((isinstance(tile, dict) and tile.get("kind") == "PLANT"
                                   and (day - tile.get("planted_day", day)) >= CROPS.get(str(tile.get("crop") or ""), {}).get("max", 2))
                                  or (isinstance(tile, dict) and tile.get("kind") in ("COOP", "PASTURE", "PLANT")
                                      and tile.get("yield_units", 0) > 0)),
+                                     
+            # 6. COLLECT_FERTILIZER (Prioridade elevada - v14)
+            lambda tile, x, y: (isinstance(tile, dict) and tile.get("kind") in ("COOP", "PASTURE")
+                                 and tile.get("fertilizer_available")),
+                                 
+            # 7. APPLY_FERTILIZER
             lambda tile, x, y: (isinstance(tile, dict) and tile.get("kind") == "PLANT"
                                  and tile.get("crop") in ("MELON", "STRAWBERRY")
                                  and tile.get("fertilized_until_day", -1) < day
                                  and shed.get("FERTILIZER", 0) > 0),
-            lambda tile, x, y: (isinstance(tile, dict) and tile.get("kind") in ("COOP", "PASTURE")
-                                 and tile.get("fertilizer_available")),
-            lambda tile, x, y: (isinstance(tile, dict) and tile.get("kind") in ("COOP", "PASTURE")
-                                 and tile.get("animal") and not tile.get("cared_today")),
+                                 
+            # 8. DIG WEED (Garante limpeza no mid-game)
+            lambda tile, x, y: isinstance(tile, dict) and tile.get("kind") == "WEED",
+            
+            # 9. PLACE ANIMAL
             lambda tile, x, y: (isinstance(tile, dict) and tile.get("kind") in ("COOP", "PASTURE")
                                  and tile.get("animal") is None and worker_inventory
                                  and any(qty > 0 and item in ANIMALS and ANIMALS[item]["needs"] == tile.get("kind")
                                          for item, qty in worker_inventory.items())),
-            lambda tile, x, y: isinstance(tile, dict) and tile.get("kind") == "WEED",
+            
+            # 10. TILE VAZIO (Plant/Build)
             lambda tile, x, y: tile is None,
         ]
 
@@ -609,7 +619,10 @@ class KaggricultureAgentV13:
                 continue
 
             if item == "MELON" and op_flooding:
-                orders.append(["SELL", item, qty])
+                # FIX v14: Smart Melon Selling (monitora preco real e vende lotes de 10 max)
+                market_price = prices.get("MELON", 100)
+                if market_price > 50:
+                    orders.append(["SELL", item, min(qty, 10)])
                 continue
 
             if item == "WHEAT":
@@ -624,23 +637,17 @@ class KaggricultureAgentV13:
             if sell_qty > 0:
                 orders.append(["SELL", item, sell_qty])
 
-        # BUY_LAND (mid/late game): Opening Book ja comprou a 1a terra na Hora 1.
-        # A partir do dia 1, compra quadrantes adicionais se houver margem.
-        LAND_RESERVE = 600
+        # BUY_LAND (mid/late game): FIX v14 Mais agressivo nos Dias 1-3
+        LAND_RESERVE = 200 if day <= 3 else 600
         if day > 0 and n_quadrants < 4 and money > land_cost + LAND_RESERVE:
             orders.append(["BUY_LAND"])
 
-        # HIRE adaptativo ao estagio do jogo
-        urgent = (len(tasks.get("water_needed", []))
-                  + len(tasks.get("feed_needed",   []))
-                  + len(tasks.get("harvest_ready", [])))
-        if day <= 5:
-            hire_threshold, hire_reserve = 3, 200
-        elif day <= 10:
-            hire_threshold, hire_reserve = 6, 400
-        else:
-            hire_threshold, hire_reserve = 12, 500
-        if urgent >= hire_threshold and money > hire_reserve and not farm.get("hands"):
+        # HIRE adaptativo ao estagio do jogo (FIX v14: Target Hands diario)
+        target_hands = 7 if day <= 5 else (10 if day <= 10 else 14)
+        current_hands = len(farm.get("hands", []))
+        hire_reserve = 200 if day <= 5 else (400 if day <= 10 else 500)
+        
+        if current_hands < target_hands and money > hire_reserve:
             orders.append(["HIRE"])
 
         # Compra de Sementes
@@ -651,6 +658,10 @@ class KaggricultureAgentV13:
             seed_targets = {"MELON": 6, "WHEAT": 8,  "CARROT": 5, "TOMATO": 3, "STRAWBERRY": 3}
         else:
             seed_targets = {"MELON": 4, "WHEAT": 6,  "CARROT": 4, "TOMATO": 2, "STRAWBERRY": 2}
+            
+        # FIX v14: Corta a compra de MELON no endgame
+        if day >= 18:
+            seed_targets["MELON"] = 0
 
         pending_land = land_cost if n_quadrants < 4 else 0
         seed_reserve = max(200, pending_land // 2)
@@ -765,6 +776,10 @@ class KaggricultureAgentV13:
                     return action
 
             if self._is_shed_adjacent((x, y)):
+                # FIX v14: DROP proativo se o inventario estourar
+                if winv and sum(winv.values()) > 10:
+                    return ["DROP"]
+                    
                 for atype in ("GOOSE", "COW", "SHEEP"):
                     if shed.get(atype, 0) > 0 and (not winv or sum(winv.values()) == 0):
                         self.animals_bought += 1
@@ -794,6 +809,6 @@ class KaggricultureAgentV13:
 # =============================================================================
 # ENTRY POINTS (compativeis com a arena Kaggle)
 # =============================================================================
-agent = KaggricultureAgentV13()
+agent = KaggricultureAgentV14()
 def agent_fn(observation, configuration=None):   return agent(observation)
 def main_agent(observation, configuration=None): return agent(observation)
