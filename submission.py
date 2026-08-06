@@ -1,29 +1,23 @@
 """
-Kaggriculture Autonomous AI Agent — Version 14 (v14)
+Kaggriculture Autonomous AI Agent — Version 15 (v15)
 
-[v8]  BFS + Expansao + Pecuaria + Arbitragem Municipal
-[v9]  Horizonte de Eventos + Espionagem do Oponente + Hour 23 Flush
-[v10] Early Game Acelerado: BUY_LAND custo real, HIRE adaptativo,
-      seed_targets escalados por quadrante, reserva de capital dinamica
-[v11] Fixes do Forum: Anti-Weed (PASS em hora>=23), venda de
-      FERTILIZER excedente (>10 unidades), Fixed Asset Meta acelerado
-[v12] Deterministic Opening Book: "Tall Meta" (Top 1 Global, 128k+ pts)
-[v13] "Wide + Tall Meta": BUY_LAND na Hora 1, WHEAT/CARROT massivo
-[v14] "Wide + Tall" Refined: BUY_LAND na Hora 0, HIRE otimizado (7 hands),
-      Recontratacao diaria agressiva, DROP proativo, prioridades rebalanceadas.
+Meta: Fixed Asset Engine (Kaileh57 Top-1 clone, 128k-148k pts)
 
-      Fases do Opening Book (Dia 0):
-        Hour 0-1  | GOLDEN_DUMP  : BUY_LAND + 4x HIRE + COW/SHEEP + sementes
-        Hour 2    | SUPPLY_HACK  : 3x HIRE + mais sementes
-        Hour 3-5  | INFRA_RUSH   : BUILD_PASTURE + PLACE animais (NW+NE)
-        Hour 6-9  | IGNITION     : FEED/CARE animais + PLANT em ambos quadrantes
-        Hour >=10 | COMPLETE     : Transicao para engine dinamica v11
+Opening (Dia 0, Hora 1):
+  5x HIRE + 2 SHEEP + 2 COW + WHEAT 7 + MELON 12
+  Sem BUY_LAND. Capital cai para ~$158.
+
+Fluxo:
+  Dia 0   : BUILD_PASTURE + PLACE + plant MELON/WHEAT (cash early) + FEED
+  Dia 1   : Broke -> 0 hands, so farmer FEED/CARE/COLLECT + BUY_PRODUCT WHEAT
+  Dia 3-11: Escala para 8 COW + 6 SHEEP, BUY_LAND nos dias 7 e 11
+  Mid/Late: Venda continua MILK/WOOL, rehire adaptativo, zero crops finais
 """
 
 from collections import deque
 
 # =============================================================================
-# CONSTANTES GLOBAIS
+# CONSTANTES
 # =============================================================================
 CROPS = {
     "WHEAT":      {"first": 2,  "max": 4,  "seed_cost": 10,  "price": 25},
@@ -33,67 +27,37 @@ CROPS = {
     "MELON":      {"first": 10, "max": 10, "seed_cost": 80,  "price": 250},
 }
 
-PLANT_PRIORITY = ["MELON", "STRAWBERRY", "TOMATO", "CARROT", "WHEAT"]
-
 ANIMALS = {
     "GOOSE": {"buy_cost": 300, "needs": "COOP",    "product": "EGG",  "price": 50},
     "COW":   {"buy_cost": 400, "needs": "PASTURE", "product": "MILK", "price": 160},
     "SHEEP": {"buy_cost": 500, "needs": "PASTURE", "product": "WOOL", "price": 200},
 }
 
-SHOP_DEMAND = {
-    "BAKERY":         ["EGG", "WHEAT"],
-    "PIZZA_SHOP":     ["MILK", "TOMATO", "WHEAT"],
-    "BRUNCH_SPOT":    ["EGG", "WHEAT", "STRAWBERRY"],
-    "YARN_STORE":     ["WOOL", "WOOL"],
-    "ICE_CREAM_SHOP": ["STRAWBERRY", "MILK", "WHEAT"],
-    "PET_CAFE":       ["CARROT", "CARROT"],
-    "SMOOTHIE_SHOP":  ["STRAWBERRY", "MILK"],
-    "FARMERS_MARKET": ["WHEAT", "CARROT", "TOMATO", "STRAWBERRY"],
-}
-
 MAX_MARKET_ORDERS = 10
-SHED_SOFT_CAP     = 75
-SHED_HARD_CAP     = 100
-LAND_COST: dict[int, int] = {1: 1000, 2: 2000, 3: 4000}
+SHED_SOFT_CAP = 75
+LAND_COST = {1: 1000, 2: 2000, 3: 4000}
+
+TARGET_COW = 8
+TARGET_SHEEP = 6
+TARGET_PASTURES = 14
 
 
 # =============================================================================
-# OPENING BOOK -- Autoamato de Estado Finito para o Dia 0
+# OPENING BOOK — Dia 0 (replica exata do Top 1)
 # =============================================================================
 class OpeningBook:
     """
-    Deterministic Opening Book v13: "Wide + Tall Meta" do Top 1 Global.
-
-    Insight chave (replay Kaileh57 ID 90465576):
-      - BUY_LAND na Hora 1 dobra o espaco util imediatamente (NW+NE = 50 tiles).
-      - 2 ondas de HIRE (5+4=9 peoes) cobrem ambos os quadrantes em paralelo.
-      - Portfolio de sementes WHEAT+CARROT (maior ROI de ciclo curto) em larga
-        escala, combinado com COW+SHEEP como Fixed Asset Engine.
-      - FEED usando trigo do shed (nao do inventario do ator) = todos os
-        peoes podem alimentar, sem gargalo de portador dedicado.
-
-    A sequencia abaixo e executada deterministicamente por hora (Dia 0).
-    Quando done=True, o agente devolve o controle ao engine dinamico v11.
+    Opening deterministico v15 (Kaileh57):
+      Hour 1    : market dump (5 HIRE + animals + seeds)
+      Hour 2-5  : PICKUP + BUILD_PASTURE + PLACE
+      Hour 6-23 : FEED / CARE / PLANT MELON+WHEAT / WATER
     """
-
-    # Mapa de fases: (nome, hora_limite_exclusiva)
-    # A fase e ativa quando hour < hora_limite.
-    _PHASE_MAP = [
-        ("golden_dump", 2),   # hours 0-1
-        ("supply_hack",  3),   # hour  2
-        ("infra_rush",   6),   # hours 3-5
-        ("ignition",    10),   # hours 6-9
-    ]
 
     def __init__(self):
         self.done = False
 
     def is_active(self, day):
-        """Retorna True enquanto o Opening Book deve controlar o turno (Dia 0)."""
         return day == 0 and not self.done
-
-    # -- Helpers de Navegacao e Tiles --
 
     @staticmethod
     def _tile_at(tiles, x, y):
@@ -106,269 +70,172 @@ class OpeningBook:
 
     @staticmethod
     def _navigate(pos, target):
-        """Passo direcional greedy em direcao ao alvo (prioridade eixo Y)."""
-        x, y   = pos
+        x, y = pos
         tx, ty = target
-        if ty < y: return ["NORTH"]
-        if ty > y: return ["SOUTH"]
-        if tx < x: return ["WEST"]
-        if tx > x: return ["EAST"]
+        if ty < y:
+            return ["NORTH"]
+        if ty > y:
+            return ["SOUTH"]
+        if tx < x:
+            return ["WEST"]
+        if tx > x:
+            return ["EAST"]
         return ["PASS"]
 
-    def _find_empty_tile(self, tiles, top_half_only=True):
-        """
-        Busca tile vazio (None) priorizando o topo do board (NW + NE).
+    def _find_empty(self, tiles):
+        h = len(tiles)
+        w = len(tiles[0]) if h else 0
+        half = h // 2
+        for y_range in (range(half), range(h)):
+            for y in y_range:
+                row = tiles[y] if y < h else []
+                for x in range(w):
+                    if x < len(row) and row[x] is None:
+                        return (x, y)
+        return None
 
-        v13: com BUY_LAND na Hora 1, o quadrante NE (x 5-9, y 0-4) esta
-        desbloqueado junto com o NW. Busca toda a metade superior (y < half)
-        em toda a largura (x 0..w), entao cai para o board completo.
-        """
-        h      = len(tiles)
-        w      = len(tiles[0]) if h > 0 else 0
-        half_h = h // 2
-        ry = range(half_h) if top_half_only else range(h)
-        for y in ry:
-            row = tiles[y] if y < h else []
-            for x in range(w):          # varre TODA a largura (NW + NE)
-                if x < len(row) and row[x] is None:
+    def _find_empty_pasture(self, tiles):
+        for y, row in enumerate(tiles):
+            for x, t in enumerate(row if isinstance(row, list) else []):
+                if isinstance(t, dict) and t.get("kind") == "PASTURE" and not t.get("animal"):
                     return (x, y)
-        if top_half_only:               # fallback: board completo
-            return self._find_empty_tile(tiles, top_half_only=False)
         return None
 
     @staticmethod
-    def _get_phase(hour):
-        for name, upper in OpeningBook._PHASE_MAP:
-            if hour < upper:
-                return name
-        return "complete"
+    def _is_shed_adj(pos, board=10):
+        half = board // 2
+        x, y = pos
+        return x in (half - 1, half) and y in (half - 1, half)
 
-    # -- Ordens de Mercado por Fase --
-
-    @staticmethod
-    def _market_golden_dump():
-        """
-        Step 1 (hora 0-1): Golden Dump v14.
-
-        BUY_LAND na Hora 0 (instant-unlock NE para o Hand 0 nao ficar preso).
-        Reduzido para 4x HIRE para preservar capital para sementes.
-        """
-        return [
-            ["BUY_LAND"],
-            ["HIRE"],
-            ["HIRE"],
-            ["HIRE"],
-            ["HIRE"],                         # 1a onda: 4x HIRE
-            ["BUY_ANIMAL", "COW",   2],
-            ["BUY_ANIMAL", "SHEEP", 1],       # Apenas 1 sheep para econ
-            ["BUY_SEED",   "WHEAT", 10],
-            ["BUY_SEED",   "CARROT", 4],
-            ["BUY_SEED",   "MELON", 2],
-        ]   # = 10 ordens
-
-    @staticmethod
-    def _market_supply_hack():
-        """
-        Step 2 (hora 2): 2a Onda de Contratacao + Sementes.
-        """
-        return [
-            ["HIRE"],
-            ["HIRE"],
-            ["HIRE"],                         # 2a onda: +3 HIRE (total 7)
-            ["BUY_SEED", "WHEAT", 4],
-            ["BUY_SEED", "CARROT", 4],
-        ]
-
-    # -- Acao Individual de Worker por Fase --
-
-    def _worker_action(self, phase, pos, inv, tiles, shed, seeds, worker_idx=0):
-        """
-        Determina a acao de UM worker no Opening Book.
-
-        worker_idx:
-          -1 = fazendeiro principal (farmer)
-           0 = hand 0 (primeiro peao contratado)
-           1 = hand 1 (segundo peao contratado)
-           N >= 2 = peoes extras (sem tarefa critica no opening)
-        """
-        x, y  = pos
-        tile  = self._tile_at(tiles, x, y)
-        inv   = inv   or {}
+    def _worker(self, hour, pos, inv, tiles, shed, seeds, idx):
+        x, y = pos
+        tile = self._tile_at(tiles, x, y)
+        inv = inv or {}
+        shed = shed or {}
         seeds = seeds or {}
 
-        # SUPPLY_HACK (hora 2): 2a onda de HIRE ja foi para o mercado.
-        # Workers: Farmer e Hand 0 pegam animais; demais constroem/plantam.
-        #   Farmer (idx -1) : PICKUP COW  2  -> INFRA_RUSH: coloca vacas
-        #   Hand 0 (idx  0) : PICKUP SHEEP 2 -> INFRA_RUSH: coloca ovelhas
-        #   Hand 1+ (idx>=1): PASS           -> prontos para BUILD/PLANT
-        #   Obs: FEED usa trigo do SHED (nao de inventario dedicado).
-        if phase == "supply_hack":
-            if worker_idx == -1:
-                if inv.get("COW", 0) == 0 and shed.get("COW", 0) > 0:
-                    return ["PICKUP", "COW", 2]
-            elif worker_idx == 0:
-                if inv.get("SHEEP", 0) == 0 and shed.get("SHEEP", 0) > 0:
-                    return ["PICKUP", "SHEEP", 2]
-            return ["PASS"]
-
-        # ── INFRA_RUSH (horas 3-5): construir PASTUREs + alocar animais ────
-        if phase == "infra_rush":
-            # Validacao: apenas atores que carregam um animal COW/SHEEP fazem PLACE
-            carrying = {a for a in ("COW", "SHEEP", "GOOSE") if inv.get(a, 0) > 0}
-
-            # Esta sobre pastagem vazia -> alocar o animal que carrega
-            if isinstance(tile, dict) and tile.get("kind") == "PASTURE" and not tile.get("animal"):
-                for atype in ("COW", "SHEEP"):
-                    if atype in carrying:           # guard: tem o animal no inv
-                        return ["PLACE", atype]
-                
-                # Nao carrega animal: procura tile vazio para construir PASTURE
-                target = self._find_empty_tile(tiles, top_half_only=True)
+        # Hora 2-5: PICKUP + BUILD + PLACE
+        if hour <= 5:
+            if idx == -1 and inv.get("COW", 0) == 0 and shed.get("COW", 0) > 0:
+                return ["PICKUP", "COW", 2]
+            if idx == 0 and inv.get("SHEEP", 0) == 0 and shed.get("SHEEP", 0) > 0:
+                return ["PICKUP", "SHEEP", 2]
+            carrying = [a for a in ("COW", "SHEEP") if inv.get(a, 0) > 0]
+            if carrying:
+                if isinstance(tile, dict) and tile.get("kind") == "PASTURE" and not tile.get("animal"):
+                    return ["PLACE", carrying[0]]
+                target = self._find_empty_pasture(tiles)
                 if target and target != (x, y):
                     return self._navigate(pos, target)
+                if tile is None:
+                    return ["BUILD_PASTURE"]
+                empty = self._find_empty(tiles)
+                if empty and empty != (x, y):
+                    return self._navigate(pos, empty)
                 return ["PASS"]
-
-            # Esta carregando animal -> navegar ate pastagem vazia mais proxima
-            if carrying:
-                for ry, row in enumerate(tiles):
-                    for rx, t in enumerate(row if isinstance(row, list) else []):
-                        if isinstance(t, dict) and t.get("kind") == "PASTURE" and not t.get("animal"):
-                            if (rx, ry) != (x, y):
-                                return self._navigate(pos, (rx, ry))
-                return ["PASS"]
-
-            # Tile atual esta vazio -> construir pastagem
             if tile is None:
                 return ["BUILD_PASTURE"]
-
-            # Mover em direcao ao tile vazio mais proximo (NW + NE)
-            target = self._find_empty_tile(tiles, top_half_only=True)
-            if target and target != (x, y):
-                return self._navigate(pos, target)
+            empty = self._find_empty(tiles)
+            if empty and empty != (x, y):
+                return self._navigate(pos, empty)
             return ["PASS"]
 
-        # ── IGNITION (horas 6-9): alimentar/cuidar animais + plantar ────────
-        if phase == "ignition":
-            # Prioridade 1: acao direta sobre tile atual (animal)
-            if isinstance(tile, dict) and tile.get("kind") in ("COOP", "PASTURE"):
-                if tile.get("animal"):
-                    # v13: FEED usa WHEAT do SHED (nao do inventario do ator).
-                    # Qualquer peao pode alimentar, sem gargalo de portador.
-                    # Guard: shed deve ter trigo disponivel.
-                    if not tile.get("fed_today") and shed.get("WHEAT", 0) > 0:
-                        return ["FEED"]
-                    if not tile.get("cared_today"):
-                        return ["CARE"]
-                    if tile.get("yield_units", 0) > 0:
-                        return ["HARVEST"]
+        # Hora 6+: FEED / CARE / PLANT / WATER
+        if isinstance(tile, dict) and tile.get("kind") == "PASTURE" and tile.get("animal"):
+            if not tile.get("fed_today") and (shed.get("WHEAT", 0) > 0 or inv.get("WHEAT", 0) > 0):
+                return ["FEED"]
+            if not tile.get("cared_today"):
+                return ["CARE"]
+            if tile.get("yield_units", 0) > 0:
+                return ["HARVEST"]
+            if tile.get("fertilizer_available"):
+                return ["COLLECT_FERTILIZER"]
 
-            # Prioridade 2: plantar na tile atual (MELON > WHEAT)
-            if tile is None:
-                for crop in ("MELON", "WHEAT"):
-                    # HOTFIX: valida disponibilidade de sementes antes de PLANT.
-                    if seeds.get(crop, 0) > 0:
-                        return ["PLANT", crop]
+        if isinstance(tile, dict) and tile.get("kind") == "PLANT":
+            if not tile.get("watered_today"):
+                return ["WATER"]
+            if tile.get("yield_units", 0) > 0:
+                return ["HARVEST"]
 
-            # Prioridade 3: navegar ate animal nao tratado
-            # Para o Hand 1 (com trigo), prioriza animals nao alimentados.
-            # Para os demais, prioriza animals nao cuidados (CARE).
-            for ry, row in enumerate(tiles):
-                for rx, t in enumerate(row if isinstance(row, list) else []):
-                    if not (isinstance(t, dict) and t.get("kind") in ("COOP", "PASTURE") and t.get("animal")):
-                        continue
-                    needs_feed = not t.get("fed_today")  and shed.get("WHEAT", 0) > 0
-                    needs_care = not t.get("cared_today")
-                    if (needs_feed or needs_care) and (rx, ry) != (x, y):
-                        return self._navigate(pos, (rx, ry))
+        if tile is None and hour <= 20:
+            for crop in ("MELON", "WHEAT"):
+                if seeds.get(crop, 0) > 0:
+                    return ["PLANT", crop]
 
-            # Prioridade 4: navegar ate tile vazio para plantar (NW + NE)
-            if any(seeds.get(c, 0) > 0 for c in ("MELON", "WHEAT", "CARROT")):
-                target = self._find_empty_tile(tiles, top_half_only=True)
-                if target and target != (x, y):
-                    return self._navigate(pos, target)
+        for ry, row in enumerate(tiles):
+            for rx, t in enumerate(row if isinstance(row, list) else []):
+                if not (isinstance(t, dict) and t.get("kind") == "PASTURE" and t.get("animal")):
+                    continue
+                needs = ((not t.get("fed_today") and shed.get("WHEAT", 0) > 0)
+                         or not t.get("cared_today"))
+                if needs and (rx, ry) != (x, y):
+                    return self._navigate(pos, (rx, ry))
 
-            return ["PASS"]
+        if hour <= 20 and any(seeds.get(c, 0) > 0 for c in ("MELON", "WHEAT")):
+            empty = self._find_empty(tiles)
+            if empty and empty != (x, y):
+                return self._navigate(pos, empty)
+
+        if self._is_shed_adj(pos) and shed.get("WHEAT", 0) > 0 and inv.get("WHEAT", 0) == 0:
+            return ["PICKUP", "WHEAT", min(3, shed.get("WHEAT", 0))]
 
         return ["PASS"]
 
-    # -- Entry Point Principal --
-
     def execute(self, obs):
-        """
-        Executa um step do Opening Book.
-        Retorna dict {farmer, hands, market} ou None quando completo.
-        None sinaliza ao agente para usar a engine dinamica.
-        """
-        hour  = obs.get("hour", 0)
-        phase = self._get_phase(hour)
-
-        if phase == "complete":
+        hour = obs.get("hour", 0)
+        if hour >= 24:
             self.done = True
             return None
 
-        player  = obs.get("player", 0)
-        farms   = obs.get("farms") or [{}]
-        farm    = (farms[player] if player < len(farms) else {}) or {}
+        player = obs.get("player", 0)
+        farms = obs.get("farms") or [{}]
+        farm = (farms[player] if player < len(farms) else {}) or {}
         private = obs.get("private") or {}
-        shed    = private.get("shed")         or {}
-        seeds   = private.get("seeds")        or {}
-        invs    = private.get("inventories")  or []
-        tiles   = farm.get("tiles")           or []
+        shed = private.get("shed") or {}
+        seeds = private.get("seeds") or {}
+        invs = private.get("inventories") or []
+        tiles = farm.get("tiles") or []
 
-        # Ordens de mercado (apenas nas fases iniciais)
-        if phase == "golden_dump":
-            market = self._market_golden_dump()
-        elif phase == "supply_hack":
-            market = self._market_supply_hack()
-        else:
-            market = []
+        market = []
+        if hour == 1:
+            market = [
+                ["HIRE"], ["HIRE"], ["HIRE"], ["HIRE"], ["HIRE"],
+                ["BUY_ANIMAL", "SHEEP", 2],
+                ["BUY_ANIMAL", "COW", 2],
+                ["BUY_SEED", "WHEAT", 7],
+                ["BUY_SEED", "MELON", 12],
+            ]
+        elif hour == 2:
+            market = [["BUY_PRODUCT", "WHEAT", 2]]
 
-        # Acao do fazendeiro principal (worker_idx=-1 = rota exclusiva de COW)
         farmer_pos = farm.get("farmer") or [0, 0]
         farmer_inv = invs[0] if invs else {}
-        farmer_act = self._worker_action(phase, farmer_pos, farmer_inv, tiles, shed, seeds,
-                                         worker_idx=-1)
+        farmer_act = self._worker(hour, farmer_pos, farmer_inv, tiles, shed, seeds, -1)
 
-        # Acoes dos peoes contratados (worker_idx=i: 0=SHEEP, 1+=BUILD/PLANT/CARE)
         hands_acts = []
         for i, hpos in enumerate(farm.get("hands") or []):
             h_inv = invs[i + 1] if i + 1 < len(invs) else {}
-            hands_acts.append(
-                self._worker_action(phase, hpos, h_inv, tiles, shed, seeds,
-                                    worker_idx=i)
-            )
+            hands_acts.append(self._worker(hour, hpos, h_inv, tiles, shed, seeds, i))
 
         return {"farmer": farmer_act, "hands": hands_acts, "market": market}
 
 
 # =============================================================================
-# ENGINE DINAMICO -- Mid/Late Game (v14, com todos os hotfixes)
+# ENGINE DINAMICO — Mid/Late (Fixed Asset Meta)
 # =============================================================================
-class KaggricultureAgentV14:
-    """
-    Agente principal v14 -- "Wide + Tall Meta" Refined.
-    - Dia 0, hora < 10  -> OpeningBook v14 (BUY_LAND Hora0 + 7 peoes + sementes NW+NE)
-    - Dia 0, hora >= 10 e demais dias -> Engine dinamica v11 com hotfixes:
-        Anti-Weed Lock  : PASS em vez de PLANT se hour >= 23
-        Fertilizer Sell : vender FERTILIZER excedente (manter <= 10 unidades)
-        Fixed Asset Meta: BUILD_PASTURE acelerado (dia 5, sem exigir gansos)
-    """
-
+class KaggricultureAgentV15:
     def __init__(self):
-        self.opening      = OpeningBook()
-        self.last_day     = -1
-        self.watered_this_day: set = set()
-        self.fed_this_day: set     = set()
-        self.price_history: dict   = {}
-        self.animals_bought        = 0
-
-    # -- Helpers estaticos --
+        self.opening = OpeningBook()
+        self.last_day = -1
+        self.watered_this_day = set()
+        self.fed_this_day = set()
+        self.cared_this_day = set()
 
     @staticmethod
     def _tile_at(farm, pos):
         if not isinstance(pos, (list, tuple)) or len(pos) != 2:
             return None
-        x, y  = pos
+        x, y = pos
         tiles = farm.get("tiles", [])
         if not (0 <= y < len(tiles)):
             return None
@@ -378,437 +245,381 @@ class KaggricultureAgentV14:
         return row[x]
 
     @staticmethod
-    def _is_empty_unlocked(tile):
-        return tile is None
-
-    @staticmethod
-    def _is_animal_struct(tile):
-        return isinstance(tile, dict) and tile.get("kind") in ("COOP", "PASTURE")
-
-    @staticmethod
-    def _is_shed_adjacent(pos, board_size=10):
-        half = board_size // 2
+    def _is_shed_adj(pos, board=10):
+        half = board // 2
         x, y = pos
         return x in (half - 1, half) and y in (half - 1, half)
 
-    # -- BFS --
-
-    def _bfs_nearest(self, start, condition, farm, exclude):
-        sx, sy  = start
-        tiles   = farm.get("tiles", [])
-        board_h = len(tiles)
-        board_w = len(tiles[0]) if board_h > 0 else 0
-        if board_h == 0:
-            return (None, None, None)
-
-        queue   = deque()
-        visited = set()
-        queue.append((sx, sy, None))
-        visited.add((sx, sy))
-
-        while queue:
-            x, y, first_dir = queue.popleft()
+    def _bfs(self, start, condition, farm, exclude):
+        sx, sy = start
+        tiles = farm.get("tiles", [])
+        bh = len(tiles)
+        bw = len(tiles[0]) if bh else 0
+        if bh == 0:
+            return None, None, None
+        q = deque()
+        vis = set()
+        q.append((sx, sy, None))
+        vis.add((sx, sy))
+        while q:
+            x, y, first = q.popleft()
             tile = self._tile_at(farm, (x, y))
-
             if (x, y) != (sx, sy):
                 if tile != "LOCKED" and condition(tile, x, y) and (x, y) not in exclude:
-                    return (x, y, first_dir)
-
-            for dx, dy, dname in [(0, -1, "NORTH"), (0, 1, "SOUTH"), (-1, 0, "WEST"), (1, 0, "EAST")]:
+                    return x, y, first
+            for dx, dy, d in ((0, -1, "NORTH"), (0, 1, "SOUTH"),
+                              (-1, 0, "WEST"), (1, 0, "EAST")):
                 nx, ny = x + dx, y + dy
-                if (nx, ny) not in visited and 0 <= nx < board_w and 0 <= ny < board_h:
-                    visited.add((nx, ny))
-                    ndir = first_dir if first_dir else dname
-                    queue.append((nx, ny, ndir))
+                if (nx, ny) not in vis and 0 <= nx < bw and 0 <= ny < bh:
+                    vis.add((nx, ny))
+                    q.append((nx, ny, first if first else d))
+        return None, None, None
 
-        return (None, None, None)
+    def _count_animals(self, farm):
+        cows = sheep = pastures = empty_past = 0
+        for row in farm.get("tiles", []):
+            for t in row if isinstance(row, list) else []:
+                if isinstance(t, dict) and t.get("kind") == "PASTURE":
+                    pastures += 1
+                    if t.get("animal") == "COW":
+                        cows += 1
+                    elif t.get("animal") == "SHEEP":
+                        sheep += 1
+                    elif not t.get("animal"):
+                        empty_past += 1
+        return cows, sheep, pastures, empty_past
 
-    # -- Scan de Tarefas --
-
-    def _scan_tiles(self, farm, day):
-        tiles = farm.get("tiles", [])
-        tasks = {"water_needed": [], "feed_needed": [], "harvest_ready": []}
-
-        for y, row in enumerate(tiles):
-            for x, tile in enumerate(row):
-                if not isinstance(tile, dict):
+    def _scan(self, farm, day):
+        tasks = {
+            "feed": [], "care": [], "harvest": [], "water": [],
+            "fert": [], "empty": 0, "weeds": [],
+        }
+        for y, row in enumerate(farm.get("tiles", [])):
+            for x, t in enumerate(row if isinstance(row, list) else []):
+                if t is None:
+                    tasks["empty"] += 1
                     continue
-                kind = tile.get("kind")
-                if kind == "PLANT":
-                    crop = tile.get("crop")
-                    info = CROPS.get(crop if isinstance(crop, str) else "", {})
-                    age  = day - tile.get("planted_day", day)
-                    if (age >= info.get("max", 2)
-                            or (crop in ("TOMATO", "STRAWBERRY")
-                                and age >= info.get("first", 2)
-                                and tile.get("yield_units", 0) > 0)):
-                        tasks["harvest_ready"].append((x, y))
-                    if not tile.get("watered_today") and (x, y) not in self.watered_this_day:
-                        tasks["water_needed"].append((x, y))
-                elif kind in ("COOP", "PASTURE"):
-                    if tile.get("yield_units", 0) > 0:
-                        tasks["harvest_ready"].append((x, y))
-                    if tile.get("animal") and not tile.get("fed_today") and (x, y) not in self.fed_this_day:
-                        tasks["feed_needed"].append((x, y))
+                if not isinstance(t, dict):
+                    continue
+                k = t.get("kind")
+                if k == "PASTURE" and t.get("animal"):
+                    if not t.get("fed_today") and (x, y) not in self.fed_this_day:
+                        tasks["feed"].append((x, y))
+                    if not t.get("cared_today") and (x, y) not in self.cared_this_day:
+                        tasks["care"].append((x, y))
+                    if t.get("yield_units", 0) > 0:
+                        tasks["harvest"].append((x, y))
+                    if t.get("fertilizer_available"):
+                        tasks["fert"].append((x, y))
+                elif k == "PLANT":
+                    if not t.get("watered_today") and (x, y) not in self.watered_this_day:
+                        tasks["water"].append((x, y))
+                    crop = t.get("crop", "")
+                    info = CROPS.get(crop, {})
+                    age = day - t.get("planted_day", day)
+                    if age >= info.get("max", 2) or t.get("yield_units", 0) > 0:
+                        tasks["harvest"].append((x, y))
+                elif k == "WEED":
+                    tasks["weeds"].append((x, y))
         return tasks
 
-    # -- Decisao de Acao por Tile --
+    def _market(self, obs, tasks, cows, sheep, pastures, empty_past):
+        player = obs.get("player", 0)
+        farm = obs.get("farms", [{}])[player]
+        private = obs.get("private", {})
+        day = obs.get("day", 0)
+        hour = obs.get("hour", 0)
+        shed = private.get("shed", {}) or {}
+        seeds = private.get("seeds", {}) or {}
+        money = farm.get("money", 0)
+        n_quads = len(farm.get("unlocked_quadrants", []))
+        current_hands = len(farm.get("hands") or [])
+        hires_today = farm.get("hires_today", 0) or 0
 
-    def _decide_tile_action(self, tile, shed, seeds, day, worker_inventory=None, pos=None, hour=0):
-        if self._is_empty_unlocked(tile):
-            # FIX v14: Semente plantada na hora 22 pode virar mato se nao houver water.
-            # Bloqueia PLANT se hour >= 22 (garante ao menos 1 turn para WATER).
-            if hour >= 22:
-                return ["PASS"]
-            return self._plant_action(seeds, day)
+        orders = []
+
+        if day >= 28:
+            for item, qty in sorted(shed.items()):
+                if qty > 0 and item not in ("GOOSE", "COW", "SHEEP"):
+                    orders.append(["SELL", item, qty])
+            return orders[:MAX_MARKET_ORDERS]
+
+        total_shed = sum(v for k, v in shed.items() if k not in ("GOOSE", "COW", "SHEEP"))
+        force = total_shed > SHED_SOFT_CAP or hour >= 21
+
+        for item in ("MILK", "WOOL", "MELON", "EGG", "FERTILIZER", "TOMATO",
+                     "STRAWBERRY", "CARROT", "WHEAT"):
+            qty = shed.get(item, 0)
+            if qty <= 0:
+                continue
+            if item == "WHEAT":
+                keep = max(5, (cows + sheep) * 3 + 5)
+                if force:
+                    keep = max(3, (cows + sheep) * 2)
+                sell = qty - keep
+            elif item == "FERTILIZER":
+                keep = 0 if force else min(qty, 5)
+                sell = qty - keep
+            else:
+                keep = 0 if force or item in ("MILK", "WOOL", "MELON") else 1
+                sell = qty - keep
+            if sell > 0:
+                orders.append(["SELL", item, sell])
+
+        # BUY_PRODUCT WHEAT (feed critico)
+        wheat_need = (cows + sheep) * 2 + 4
+        wheat_have = shed.get("WHEAT", 0)
+        if wheat_have < wheat_need and money > 50 and len(orders) < MAX_MARKET_ORDERS:
+            buy_n = min(wheat_need - wheat_have, 6)
+            if money > buy_n * 30 + 20:
+                orders.append(["BUY_PRODUCT", "WHEAT", buy_n])
+                money -= buy_n * 30
+
+        # HIRE adaptativo
+        fib = [1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144]
+        if day == 1:
+            target_h = 0
+        elif day <= 3:
+            target_h = 4
+        elif day <= 6:
+            target_h = 5
+        elif day <= 9:
+            target_h = 8
+        elif day <= 14:
+            target_h = 11
+        else:
+            target_h = 8
+
+        urgent = (len(tasks["feed"]) + len(tasks["care"])
+                  + len(tasks["harvest"]) + len(tasks["water"]))
+        if urgent > 15:
+            target_h = min(target_h + 3, 14)
+
+        needed = max(0, target_h - current_hands)
+        cost_est = sum(fib[min(hires_today + i, len(fib) - 1)] for i in range(needed))
+        reserve = 30 if day <= 3 else (100 if day <= 8 else 300)
+
+        if needed > 0 and money > cost_est + reserve:
+            for i in range(min(needed, MAX_MARKET_ORDERS - len(orders))):
+                orders.append(["HIRE"])
+                money -= fib[min(hires_today + i, len(fib) - 1)]
+
+        # BUY_ANIMAL (escala ate targets)
+        if day >= 3 and day <= 15 and money > 600 and len(orders) < MAX_MARKET_ORDERS:
+            if cows < TARGET_COW and (empty_past > 0 or pastures < TARGET_PASTURES):
+                n = min(2, TARGET_COW - cows, max(1, empty_past))
+                if money > 400 * n + 200:
+                    orders.append(["BUY_ANIMAL", "COW", n])
+                    money -= 400 * n
+            elif sheep < TARGET_SHEEP and (empty_past > 0 or pastures < TARGET_PASTURES):
+                n = min(2, TARGET_SHEEP - sheep, max(1, empty_past))
+                if money > 500 * n + 200:
+                    orders.append(["BUY_ANIMAL", "SHEEP", n])
+                    money -= 500 * n
+
+        # BUY_LAND (Dia 7 e ~11)
+        land_cost = LAND_COST.get(n_quads, 9999)
+        if n_quads < 3 and day >= 7 and money > land_cost + 400:
+            if n_quads == 1 and day >= 7:
+                orders.append(["BUY_LAND"])
+                money -= land_cost
+            elif n_quads == 2 and day >= 11 and money > land_cost + 800:
+                orders.append(["BUY_LAND"])
+                money -= land_cost
+
+        # Seeds: MELON early + WHEAT
+        if day <= 12 and len(orders) < MAX_MARKET_ORDERS:
+            melon_have = seeds.get("MELON", 0)
+            if melon_have < 4 and money > 400 and day <= 10:
+                need = 4 - melon_have
+                orders.append(["BUY_SEED", "MELON", need])
+                money -= 80 * need
+            wheat_seeds = seeds.get("WHEAT", 0)
+            if wheat_seeds < 3 and money > 100:
+                orders.append(["BUY_SEED", "WHEAT", 3])
+
+        return orders[:MAX_MARKET_ORDERS]
+
+    def _decide(self, tile, shed, seeds, day, inv, pos, hour, cows, sheep, empty_past):
+        inv = inv or {}
+        x, y = pos if pos else (-1, -1)
+
+        if tile is None:
+            total_animals = cows + sheep
+            if total_animals < TARGET_COW + TARGET_SHEEP or empty_past == 0:
+                if day <= 15:
+                    return ["BUILD_PASTURE"]
+            if day <= 12 and hour <= 20:
+                for crop in ("MELON", "WHEAT"):
+                    if seeds.get(crop, 0) > 0:
+                        return ["PLANT", crop]
+            return ["PASS"]
 
         if isinstance(tile, dict) and tile.get("kind") == "WEED":
             return ["DIG"]
 
-        x, y = pos if pos else (-1, -1)
-
         if isinstance(tile, dict) and tile.get("kind") == "PLANT":
-            crop      = tile.get("crop")
-            crop_info = CROPS.get(crop if isinstance(crop, str) else "", {})
-            first_day = crop_info.get("first", 2)
-            max_day   = crop_info.get("max", first_day)
-            age       = day - tile.get("planted_day", day)
-            watered   = bool(tile.get("watered_today")) or (pos and (x, y) in self.watered_this_day)
-            fert_until = tile.get("fertilized_until_day", -1)
-            can_fert   = (crop in ("MELON", "STRAWBERRY") and fert_until < day and shed.get("FERTILIZER", 0) > 0)
-            is_ongoing = crop in ("TOMATO", "STRAWBERRY")
-
-            if age >= max_day:   return ["HARVEST"]
-            if age >= first_day:
-                if is_ongoing:   return ["HARVEST"]
-                if not watered:  return ["WATER"]
-                if can_fert:     return ["FERTILIZE"]
-                if max_day - age <= 1: return ["HARVEST"]
-                return ["PASS"]
-
-            if not watered: return ["WATER"]
-            if can_fert:    return ["FERTILIZE"]
+            crop = tile.get("crop", "")
+            info = CROPS.get(crop, {})
+            age = day - tile.get("planted_day", day)
+            watered = tile.get("watered_today") or (pos and (x, y) in self.watered_this_day)
+            if age >= info.get("max", 2) or tile.get("yield_units", 0) > 0:
+                return ["HARVEST"]
+            if not watered:
+                return ["WATER"]
             return ["PASS"]
 
-        if self._is_animal_struct(tile):
+        if isinstance(tile, dict) and tile.get("kind") == "PASTURE":
             if tile.get("animal") is None:
-                if worker_inventory:
-                    for item, qty in worker_inventory.items():
-                        if qty > 0 and item in ANIMALS and ANIMALS[item]["needs"] == tile.get("kind"):
-                            return ["PLACE", item]
+                for a in ("COW", "SHEEP"):
+                    if inv.get(a, 0) > 0:
+                        return ["PLACE", a]
                 return ["PASS"]
-
-            fed = bool(tile.get("fed_today")) or (pos and (x, y) in self.fed_this_day)
-            if not fed and shed.get("WHEAT", 0) > 0: return ["FEED"]
-            if tile.get("fertilizer_available"):       return ["COLLECT_FERTILIZER"]
-            if not tile.get("cared_today"):            return ["CARE"]
-            if tile.get("yield_units", 0) > 0:        return ["HARVEST"]
+            fed = tile.get("fed_today") or (pos and (x, y) in self.fed_this_day)
+            if not fed and (shed.get("WHEAT", 0) > 0 or inv.get("WHEAT", 0) > 0):
+                return ["FEED"]
+            if tile.get("fertilizer_available"):
+                return ["COLLECT_FERTILIZER"]
+            cared = tile.get("cared_today") or (pos and (x, y) in self.cared_this_day)
+            if not cared:
+                return ["CARE"]
+            if tile.get("yield_units", 0) > 0:
+                return ["HARVEST"]
             return ["PASS"]
 
         return ["PASS"]
 
-    # -- Prioridades de Movimento (BFS conditions) --
-
-    def _build_move_priorities(self, shed, day, worker_inventory):
+    def _move_priorities(self, shed, day, inv):
+        inv = inv or {}
         return [
-            # 1. Proactive DROP: Se inventario > 10, navegar ate shed.
-            lambda tile, x, y: (sum(worker_inventory.values()) > 10 if worker_inventory else False) and self._is_shed_adjacent((x, y)),
-            
-            # 2. Water
-            lambda tile, x, y: (isinstance(tile, dict) and tile.get("kind") == "PLANT"
-                                 and (x, y) not in self.watered_this_day
-                                 and not tile.get("watered_today")),
-            
-            # 3. CARE (Prioridade elevada - v14)
-            lambda tile, x, y: (isinstance(tile, dict) and tile.get("kind") in ("COOP", "PASTURE")
-                                 and tile.get("animal") and not tile.get("cared_today")),
-            
-            # 4. FEED
-            lambda tile, x, y: (isinstance(tile, dict) and tile.get("kind") in ("COOP", "PASTURE")
-                                 and (x, y) not in self.fed_this_day
-                                 and tile.get("animal") and not tile.get("fed_today")
-                                 and shed.get("WHEAT", 0) > 0),
-            
-            # 5. HARVEST
-            lambda tile, x, y: ((isinstance(tile, dict) and tile.get("kind") == "PLANT"
-                                  and (day - tile.get("planted_day", day)) >= CROPS.get(str(tile.get("crop") or ""), {}).get("max", 2))
-                                 or (isinstance(tile, dict) and tile.get("kind") in ("COOP", "PASTURE", "PLANT")
-                                     and tile.get("yield_units", 0) > 0)),
-                                     
-            # 6. COLLECT_FERTILIZER (Prioridade elevada - v14)
-            lambda tile, x, y: (isinstance(tile, dict) and tile.get("kind") in ("COOP", "PASTURE")
-                                 and tile.get("fertilizer_available")),
-                                 
-            # 7. APPLY_FERTILIZER
-            lambda tile, x, y: (isinstance(tile, dict) and tile.get("kind") == "PLANT"
-                                 and tile.get("crop") in ("MELON", "STRAWBERRY")
-                                 and tile.get("fertilized_until_day", -1) < day
-                                 and shed.get("FERTILIZER", 0) > 0),
-                                 
-            # 8. DIG WEED (Garante limpeza no mid-game)
-            lambda tile, x, y: isinstance(tile, dict) and tile.get("kind") == "WEED",
-            
-            # 9. PLACE ANIMAL
-            lambda tile, x, y: (isinstance(tile, dict) and tile.get("kind") in ("COOP", "PASTURE")
-                                 and tile.get("animal") is None and worker_inventory
-                                 and any(qty > 0 and item in ANIMALS and ANIMALS[item]["needs"] == tile.get("kind")
-                                         for item, qty in worker_inventory.items())),
-            
-            # 10. TILE VAZIO (Plant/Build)
-            lambda tile, x, y: tile is None,
+            lambda t, x, y: (isinstance(t, dict) and t.get("kind") == "PASTURE"
+                             and t.get("animal") and not t.get("fed_today")
+                             and (x, y) not in self.fed_this_day
+                             and (shed.get("WHEAT", 0) > 0 or inv.get("WHEAT", 0) > 0)),
+            lambda t, x, y: (isinstance(t, dict)
+                             and ((t.get("kind") == "PASTURE" and t.get("yield_units", 0) > 0)
+                                  or (t.get("kind") == "PLANT" and (
+                                      t.get("yield_units", 0) > 0
+                                      or (day - t.get("planted_day", day))
+                                         >= CROPS.get(str(t.get("crop") or ""), {}).get("max", 99))))),
+            lambda t, x, y: (isinstance(t, dict) and t.get("kind") == "PASTURE"
+                             and t.get("animal") and not t.get("cared_today")
+                             and (x, y) not in self.cared_this_day),
+            lambda t, x, y: (isinstance(t, dict) and t.get("kind") == "PASTURE"
+                             and t.get("fertilizer_available")),
+            lambda t, x, y: (isinstance(t, dict) and t.get("kind") == "PLANT"
+                             and not t.get("watered_today")
+                             and (x, y) not in self.watered_this_day),
+            lambda t, x, y: (isinstance(t, dict) and t.get("kind") == "PASTURE"
+                             and t.get("animal") is None and inv
+                             and any(inv.get(a, 0) > 0 for a in ("COW", "SHEEP"))),
+            lambda t, x, y: t is None,
+            lambda t, x, y: isinstance(t, dict) and t.get("kind") == "WEED",
         ]
-
-    # -- Prioridade de Construcao --
-
-    def _get_build_priority(self, day, shed, farm):
-        goose_count = sum(1 for row in farm.get("tiles", []) for tile in row
-                          if isinstance(tile, dict) and tile.get("animal") == "GOOSE")
-        cow_count   = sum(1 for row in farm.get("tiles", []) for tile in row
-                          if isinstance(tile, dict) and tile.get("animal") == "COW")
-        empty_coops = sum(1 for row in farm.get("tiles", []) for tile in row
-                          if isinstance(tile, dict) and tile.get("kind") == "COOP"    and not tile.get("animal"))
-        empty_past  = sum(1 for row in farm.get("tiles", []) for tile in row
-                          if isinstance(tile, dict) and tile.get("kind") == "PASTURE" and not tile.get("animal"))
-
-        if goose_count == 0 and empty_coops == 0 and day < 5:  return "BUILD_COOP"
-        if goose_count < 2 and empty_coops == 0 and self.animals_bought > goose_count and day < 10:
-            return "BUILD_COOP"
-
-        # FIX v11 -- Fixed Asset Meta: PASTURE desde o dia 5, sem exigir gansos.
-        # YARN_STORE garante demanda constante de WOOL -> sem risco de crash de preco.
-        if cow_count == 0 and day >= 5 and shed.get("WHEAT", 0) > 10 and empty_past == 0:
-            return "BUILD_PASTURE"
-        return None
-
-    # -- Ordens de Mercado (Mid/Late Game) --
-
-    def _build_market_orders(self, obs, tasks):
-        player  = obs.get("player", 0)
-        farm    = obs.get("farms", [{}])[player]
-        op_farm = obs.get("farms", [{}, {}])[1 - player]
-        private = obs.get("private", {})
-        day, hour, step = obs.get("day", 0), obs.get("hour", 0), obs.get("step", 0)
-        shed    = private.get("shed",  {}) or {}
-        seeds   = private.get("seeds", {}) or {}
-        money   = farm.get("money", 0)
-        prices  = obs.get("market", {}).get("prices", {}) or {}
-
-        self._track_prices(step, prices)
-        if day >= 27:
-            return self._build_liquidation_orders(shed)
-
-        n_quadrants = len(farm.get("unlocked_quadrants", []))
-        land_cost   = LAND_COST.get(n_quadrants, 9999)
-
-        orders: list[list] = []
-        total_shed  = sum(shed.values())
-        total_invs  = sum(sum(inv.values()) for inv in private.get("inventories", []) if inv)
-        projected   = total_shed + total_invs
-        panic_flush = (hour >= 22 and projected >= 95)
-        force_sell  = panic_flush or (total_shed > SHED_SOFT_CAP)
-
-        animal_count = sum(1 for row in farm.get("tiles", []) for tile in row
-                           if isinstance(tile, dict) and tile.get("animal"))
-        op_melons    = sum(1 for row in op_farm.get("tiles", []) for tile in row
-                           if isinstance(tile, dict) and tile.get("crop") == "MELON")
-        op_flooding  = op_melons > 8
-
-        # Bloco de Vendas
-        for item, qty in sorted(shed.items()):
-            if qty <= 0 or item in ("GOOSE", "COW", "SHEEP"):
-                continue
-
-            if item == "MELON" and op_flooding:
-                # FIX v14: Smart Melon Selling (monitora preco real e vende lotes de 10 max)
-                market_price = prices.get("MELON", 100)
-                if market_price > 50:
-                    orders.append(["SELL", item, min(qty, 10)])
-                continue
-
-            if item == "WHEAT":
-                keep = 2 if panic_flush else (5 if force_sell else max(5, animal_count * 3 + 5))
-            elif item == "FERTILIZER":
-                # FIX v11: Fertilizante E vendavel (bug de doc). Buffer = 10 unidades.
-                keep = 0 if panic_flush else (5 if force_sell else min(qty, 10))
-            else:
-                keep = 0 if force_sell else 3
-
-            sell_qty = qty - keep
-            if sell_qty > 0:
-                orders.append(["SELL", item, sell_qty])
-
-        # BUY_LAND (mid/late game): FIX v14 Mais agressivo nos Dias 1-3
-        LAND_RESERVE = 200 if day <= 3 else 600
-        if day > 0 and n_quadrants < 4 and money > land_cost + LAND_RESERVE:
-            orders.append(["BUY_LAND"])
-
-        # HIRE adaptativo ao estagio do jogo (FIX v14: Target Hands diario)
-        target_hands = 7 if day <= 5 else (10 if day <= 10 else 14)
-        current_hands = len(farm.get("hands", []))
-        hire_reserve = 200 if day <= 5 else (400 if day <= 10 else 500)
-        
-        if current_hands < target_hands and money > hire_reserve:
-            orders.append(["HIRE"])
-
-        # Compra de Sementes
-        valid_crops = self._get_valid_crops(day, op_flooding)
-        if n_quadrants >= 3:
-            seed_targets = {"MELON": 8, "WHEAT": 10, "CARROT": 6, "TOMATO": 4, "STRAWBERRY": 4}
-        elif n_quadrants >= 2:
-            seed_targets = {"MELON": 6, "WHEAT": 8,  "CARROT": 5, "TOMATO": 3, "STRAWBERRY": 3}
-        else:
-            seed_targets = {"MELON": 4, "WHEAT": 6,  "CARROT": 4, "TOMATO": 2, "STRAWBERRY": 2}
-            
-        # FIX v14: Corta a compra de MELON no endgame
-        if day >= 18:
-            seed_targets["MELON"] = 0
-
-        pending_land = land_cost if n_quadrants < 4 else 0
-        seed_reserve = max(200, pending_land // 2)
-
-        for crop in PLANT_PRIORITY:
-            if crop not in valid_crops:
-                continue
-            have = seeds.get(crop, 0)
-            if have < seed_targets[crop] and len(orders) < MAX_MARKET_ORDERS:
-                need = seed_targets[crop] - have
-                cost = CROPS[crop]["seed_cost"] * need
-                if money >= cost + seed_reserve:
-                    orders.append(["BUY_SEED", crop, need])
-                    money -= cost
-
-        return orders[:MAX_MARKET_ORDERS]
-
-    def _build_liquidation_orders(self, shed):
-        return [
-            ["SELL", item, qty]
-            for item, qty in sorted(shed.items())
-            if qty > 0 and item not in ("GOOSE", "COW", "SHEEP")
-        ][:MAX_MARKET_ORDERS]
-
-    def _track_prices(self, step, prices):
-        for product, price in prices.items():
-            if product not in self.price_history:
-                self.price_history[product] = []
-            self.price_history[product].append((step, price))
-            if len(self.price_history[product]) > 10:
-                self.price_history[product] = self.price_history[product][-10:]
-
-    @staticmethod
-    def _get_valid_crops(day, op_flooding_melon=False):
-        crops = []
-        if day <= 19 and not op_flooding_melon: crops.append("MELON")
-        if day <= 18: crops.append("STRAWBERRY")
-        if day <= 21: crops.append("TOMATO")
-        if day <= 25: crops.append("WHEAT")
-        if day <= 26: crops.append("CARROT")
-        return crops
-
-    def _plant_action(self, seeds, day):
-        valid_crops = self._get_valid_crops(day)
-        if day % 3 == 0 and seeds.get("MELON", 0) > 0 and "MELON" in valid_crops:
-            return ["PLANT", "MELON"]
-        if day % 2 == 0 and seeds.get("WHEAT", 0) > 0 and "WHEAT" in valid_crops:
-            return ["PLANT", "WHEAT"]
-        for crop in PLANT_PRIORITY:
-            if seeds.get(crop, 0) > 0 and crop in valid_crops:
-                return ["PLANT", crop]
-        return ["PASS"]
-
-    # -- Loop Principal --
 
     def __call__(self, obs):
         if not isinstance(obs, dict):
             return {"farmer": ["PASS"], "hands": [], "market": []}
         player = obs.get("player", 0)
-        farms  = obs.get("farms", [])
+        farms = obs.get("farms", [])
         if not isinstance(farms, list) or player >= len(farms):
             return {"farmer": ["PASS"], "hands": [], "market": []}
 
         day = obs.get("day", 0)
 
-        # Opening Book (Dia 0, horas 0-9)
         if self.opening.is_active(day):
             result = self.opening.execute(obs)
             if result is not None:
                 return result
-            # result == None -> fase COMPLETE, cair para engine dinamica
 
-        # Engine Dinamica v11 (Mid/Late Game)
-        farm        = farms[player] or {}
-        private     = obs.get("private", {}) or {}
-        shed        = private.get("shed",         {}) or {}
-        seeds       = private.get("seeds",        {}) or {}
-        inventories = private.get("inventories",  [])
-        hour        = obs.get("hour", 0)
+        farm = farms[player] or {}
+        private = obs.get("private", {}) or {}
+        shed = private.get("shed", {}) or {}
+        seeds = private.get("seeds", {}) or {}
+        inventories = private.get("inventories", [])
+        hour = obs.get("hour", 0)
 
         if day != self.last_day:
-            self.last_day         = day
+            self.last_day = day
             self.watered_this_day = set()
-            self.fed_this_day     = set()
+            self.fed_this_day = set()
+            self.cared_this_day = set()
 
-        tasks         = self._scan_tiles(farm, day)
-        market_orders = self._build_market_orders(obs, tasks)
-        assigned      = set()
+        cows, sheep, pastures, empty_past = self._count_animals(farm)
+        tasks = self._scan(farm, day)
+        market = self._market(obs, tasks, cows, sheep, pastures, empty_past)
+        assigned = set()
 
-        def get_worker_action(wpos, winv):
+        def worker_act(wpos, winv):
             x, y = wpos
             tile = self._tile_at(farm, (x, y))
+            winv = winv or {}
 
-            if self._is_empty_unlocked(tile):
-                build_cmd = self._get_build_priority(day, shed, farm)
-                if build_cmd:
-                    return [build_cmd]
-                # Passa hour para bloquear PLANT em hora 23 (FIX v11)
-                action = self._decide_tile_action(tile, shed, seeds, day, winv, wpos, hour)
-                if action and action[0] != "PASS":
-                    return action
+            inv_sum = sum(winv.values())
+            if inv_sum > 5 and self._is_shed_adj((x, y)):
+                return ["DROP"]
+            if inv_sum > 8:
+                targets = [(4, 4), (5, 4), (4, 5), (5, 5)]
+                best = min(targets, key=lambda t: abs(t[0] - x) + abs(t[1] - y))
+                if best != (x, y):
+                    tx, ty = best
+                    if ty < y:
+                        return ["NORTH"]
+                    if ty > y:
+                        return ["SOUTH"]
+                    if tx < x:
+                        return ["WEST"]
+                    if tx > x:
+                        return ["EAST"]
 
-            if tile is not None and not self._is_empty_unlocked(tile):
-                if self._is_animal_struct(tile) and tile.get("animal") is None and winv:
-                    for item, qty in winv.items():
-                        if qty > 0 and item in ANIMALS and ANIMALS[item]["needs"] == tile.get("kind"):
-                            return ["PLACE", item]
-                action = self._decide_tile_action(tile, shed, seeds, day, winv, wpos, hour)
-                if action and action[0] != "PASS":
-                    if action[0] == "WATER": self.watered_this_day.add((x, y))
-                    elif action[0] == "FEED": self.fed_this_day.add((x, y))
-                    return action
+            action = self._decide(tile, shed, seeds, day, winv, wpos, hour,
+                                  cows, sheep, empty_past)
+            if action and action[0] != "PASS":
+                if action[0] == "WATER":
+                    self.watered_this_day.add((x, y))
+                elif action[0] == "FEED":
+                    self.fed_this_day.add((x, y))
+                elif action[0] == "CARE":
+                    self.cared_this_day.add((x, y))
+                return action
 
-            if self._is_shed_adjacent((x, y)):
-                # FIX v14: DROP proativo se o inventario estourar
-                if winv and sum(winv.values()) > 10:
+            if self._is_shed_adj((x, y)):
+                for a in ("COW", "SHEEP"):
+                    if shed.get(a, 0) > 0 and inv_sum == 0:
+                        return ["PICKUP", a, 1]
+                if shed.get("WHEAT", 0) > 0 and winv.get("WHEAT", 0) == 0 and tasks["feed"]:
+                    return ["PICKUP", "WHEAT", min(3, shed["WHEAT"])]
+                if inv_sum > 3:
                     return ["DROP"]
-                    
-                for atype in ("GOOSE", "COW", "SHEEP"):
-                    if shed.get(atype, 0) > 0 and (not winv or sum(winv.values()) == 0):
-                        self.animals_bought += 1
-                        return ["PICKUP", atype, 1]
-                if winv and sum(winv.values()) > 5:
-                    return ["DROP"]
 
-            for condition in self._build_move_priorities(shed, day, winv):
-                tx, ty, direction = self._bfs_nearest((x, y), condition, farm, assigned)
+            for cond in self._move_priorities(shed, day, winv):
+                tx, ty, direction = self._bfs((x, y), cond, farm, assigned)
                 if direction:
                     assigned.add((tx, ty))
                     return [direction]
 
             return ["PASS"]
 
-        farmer_inv    = inventories[0] if inventories else {}
-        farmer_action = get_worker_action(farm.get("farmer", [0, 0]), farmer_inv)
+        farmer_inv = inventories[0] if inventories else {}
+        farmer_action = worker_act(farm.get("farmer", [0, 0]), farmer_inv)
 
         hands_actions = []
         for i, hpos in enumerate(farm.get("hands", [])):
             h_inv = inventories[i + 1] if i + 1 < len(inventories) else {}
-            hands_actions.append(get_worker_action(hpos, h_inv))
+            hands_actions.append(worker_act(hpos, h_inv))
 
-        return {"farmer": farmer_action, "hands": hands_actions, "market": market_orders}
+        return {"farmer": farmer_action, "hands": hands_actions, "market": market}
 
 
 # =============================================================================
-# ENTRY POINTS (compativeis com a arena Kaggle)
+# ENTRY POINTS
 # =============================================================================
-agent = KaggricultureAgentV14()
-def agent_fn(observation, configuration=None):   return agent(observation)
-def main_agent(observation, configuration=None): return agent(observation)
+agent = KaggricultureAgentV15()
+
+
+def agent_fn(observation, configuration=None):
+    return agent(observation)
+
+
+def main_agent(observation, configuration=None):
+    return agent(observation)
