@@ -257,22 +257,55 @@ class KaggricultureAgentV15:
         bw = len(tiles[0]) if bh else 0
         if bh == 0:
             return None, None, None
-        q = deque()
-        vis = set()
-        q.append((sx, sy, None))
-        vis.add((sx, sy))
-        while q:
-            x, y, first = q.popleft()
-            tile = self._tile_at(farm, (x, y))
-            if (x, y) != (sx, sy):
-                if tile != "LOCKED" and condition(tile, x, y) and (x, y) not in exclude:
-                    return x, y, first
-            for dx, dy, d in ((0, -1, "NORTH"), (0, 1, "SOUTH"),
-                              (-1, 0, "WEST"), (1, 0, "EAST")):
-                nx, ny = x + dx, y + dy
-                if (nx, ny) not in vis and 0 <= nx < bw and 0 <= ny < bh:
-                    vis.add((nx, ny))
-                    q.append((nx, ny, first if first else d))
+
+        targets = []
+        for y in range(bh):
+            for x in range(bw):
+                if (x, y) != (sx, sy) and (x, y) not in exclude:
+                    tile = self._tile_at(farm, (x, y))
+                    if tile != "LOCKED" and condition(tile, x, y):
+                        targets.append((x, y))
+        
+        if not targets:
+            return None, None, None
+
+        fwd_queue = deque([(sx, sy)])
+        fwd_visited = {(sx, sy): None}
+        
+        bwd_queue = deque(targets)
+        bwd_visited = {t: t for t in targets}
+
+        while fwd_queue and bwd_queue:
+            if len(fwd_queue) <= len(bwd_queue):
+                curr_x, curr_y = fwd_queue.popleft()
+                curr_dir = fwd_visited[(curr_x, curr_y)]
+                for dx, dy, dname in ((0, -1, "NORTH"), (0, 1, "SOUTH"), (-1, 0, "WEST"), (1, 0, "EAST")):
+                    nx, ny = curr_x + dx, curr_y + dy
+                    if 0 <= nx < bw and 0 <= ny < bh:
+                        if (nx, ny) in bwd_visited:
+                            target = bwd_visited[(nx, ny)]
+                            return target[0], target[1], curr_dir if curr_dir else dname
+                        if (nx, ny) not in fwd_visited:
+                            fwd_visited[(nx, ny)] = curr_dir if curr_dir else dname
+                            fwd_queue.append((nx, ny))
+            else:
+                curr_x, curr_y = bwd_queue.popleft()
+                target = bwd_visited[(curr_x, curr_y)]
+                for dx, dy, dname in ((0, -1, "NORTH"), (0, 1, "SOUTH"), (-1, 0, "WEST"), (1, 0, "EAST")):
+                    nx, ny = curr_x + dx, curr_y + dy
+                    if 0 <= nx < bw and 0 <= ny < bh:
+                        if (nx, ny) in fwd_visited:
+                            first_dir = fwd_visited[(nx, ny)]
+                            if first_dir is None:
+                                if curr_x > nx: first_dir = "EAST"
+                                elif curr_x < nx: first_dir = "WEST"
+                                elif curr_y > ny: first_dir = "SOUTH"
+                                elif curr_y < ny: first_dir = "NORTH"
+                            return target[0], target[1], first_dir
+                        if (nx, ny) not in bwd_visited:
+                            bwd_visited[(nx, ny)] = target
+                            bwd_queue.append((nx, ny))
+
         return None, None, None
 
     def _count_animals(self, farm):
