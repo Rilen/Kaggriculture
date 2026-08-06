@@ -1,21 +1,24 @@
 """
-Kaggriculture Autonomous AI Agent — Version 12 (v12)
+Kaggriculture Autonomous AI Agent — Version 13 (v13)
 
 [v8]  BFS + Expansao + Pecuaria + Arbitragem Municipal
 [v9]  Horizonte de Eventos + Espionagem do Oponente + Hour 23 Flush
 [v10] Early Game Acelerado: BUY_LAND custo real, HIRE adaptativo,
-      seed_targets escalados por quadrante, reserva de capital dinâmica
-[v11] Fixes do Fórum: Anti-Weed (PASS em hora>=23), venda de
+      seed_targets escalados por quadrante, reserva de capital dinamica
+[v11] Fixes do Forum: Anti-Weed (PASS em hora>=23), venda de
       FERTILIZER excedente (>10 unidades), Fixed Asset Meta acelerado
-[v12] Deterministic Opening Book — "Tall Meta" (análise Top 1 Global, 128k+ pts):
-      Autômato de Estado Finito para as primeiras horas do Dia 0.
-      Premissa: NÃO comprar terra no early — adensar os 25 tiles iniciais.
+[v12] Deterministic Opening Book: "Tall Meta" (Top 1 Global, 128k+ pts),
+      FSM com GOLDEN_DUMP / SUPPLY_HACK / INFRA_RUSH / IGNITION
+[v13] "Wide + Tall Meta" (analise replay Kaileh57 vs Dahoui, ID 90465576):
+      BUY_LAND na Hora 1 (desbloqueia NE imediatamente), 2a onda de HIRE
+      na Hora 2 (total 9-10 peoes), sementes de TRIGO+CARROT em massa nos
+      dois quadrantes. FEED desacoplado do inventario do ator (shed-based).
 
       Fases do Opening Book (Dia 0):
-        Hour 0-1  | GOLDEN_DUMP  : 5x HIRE + comprar animais/sementes em massa
-        Hour 2    | SUPPLY_HACK  : BUY_PRODUCT WHEAT + PICKUP de animais do shed
-        Hour 3-5  | INFRA_RUSH   : BUILD_PASTURE nos tiles vazios + PLACE animais
-        Hour 6-9  | IGNITION     : FEED/CARE animais + PLANT MELON/WHEAT
+        Hour 0-1  | GOLDEN_DUMP  : BUY_LAND + 5x HIRE + COW/SHEEP + sementes
+        Hour 2    | SUPPLY_HACK  : 4x HIRE + mais sementes (WHEAT+CARROT)
+        Hour 3-5  | INFRA_RUSH   : BUILD_PASTURE + PLACE animais (NW+NE)
+        Hour 6-9  | IGNITION     : FEED/CARE animais + PLANT em ambos quadrantes
         Hour >=10 | COMPLETE     : Transicao para engine dinamica v11
 """
 
@@ -62,11 +65,15 @@ LAND_COST: dict[int, int] = {1: 1000, 2: 2000, 3: 4000}
 # =============================================================================
 class OpeningBook:
     """
-    Deterministic Opening Book: "Golden Path" do Top 1 Global.
+    Deterministic Opening Book v13: "Wide + Tall Meta" do Top 1 Global.
 
-    Premissa "Tall": NAO comprar terra no early game -- o retorno de curto prazo
-    dos quadrantes extras nao compensa o custo de oportunidade frente ao
-    adensamento dos 25 tiles iniciais com animais e Meloes.
+    Insight chave (replay Kaileh57 ID 90465576):
+      - BUY_LAND na Hora 1 dobra o espaco util imediatamente (NW+NE = 50 tiles).
+      - 2 ondas de HIRE (5+4=9 peoes) cobrem ambos os quadrantes em paralelo.
+      - Portfolio de sementes WHEAT+CARROT (maior ROI de ciclo curto) em larga
+        escala, combinado com COW+SHEEP como Fixed Asset Engine.
+      - FEED usando trigo do shed (nao do inventario do ator) = todos os
+        peoes podem alimentar, sem gargalo de portador dedicado.
 
     A sequencia abaixo e executada deterministicamente por hora (Dia 0).
     Quando done=True, o agente devolve o controle ao engine dinamico v11.
@@ -110,20 +117,25 @@ class OpeningBook:
         if tx > x: return ["EAST"]
         return ["PASS"]
 
-    def _find_empty_tile(self, tiles, nw_only=True):
-        """Busca tile vazio (None) mais proximo do canto NW."""
-        h    = len(tiles)
-        w    = len(tiles[0]) if h > 0 else 0
-        half = max(w, h) // 2
-        ry   = range(half) if nw_only else range(h)
-        rx   = range(half) if nw_only else range(w)
+    def _find_empty_tile(self, tiles, top_half_only=True):
+        """
+        Busca tile vazio (None) priorizando o topo do board (NW + NE).
+
+        v13: com BUY_LAND na Hora 1, o quadrante NE (x 5-9, y 0-4) esta
+        desbloqueado junto com o NW. Busca toda a metade superior (y < half)
+        em toda a largura (x 0..w), entao cai para o board completo.
+        """
+        h      = len(tiles)
+        w      = len(tiles[0]) if h > 0 else 0
+        half_h = h // 2
+        ry = range(half_h) if top_half_only else range(h)
         for y in ry:
             row = tiles[y] if y < h else []
-            for x in rx:
+            for x in range(w):          # varre TODA a largura (NW + NE)
                 if x < len(row) and row[x] is None:
                     return (x, y)
-        if nw_only:
-            return self._find_empty_tile(tiles, nw_only=False)
+        if top_half_only:               # fallback: board completo
+            return self._find_empty_tile(tiles, top_half_only=False)
         return None
 
     @staticmethod
@@ -138,32 +150,49 @@ class OpeningBook:
     @staticmethod
     def _market_golden_dump():
         """
-        Step 1 (hora 0-1): Golden Dump.
-        5x HIRE  -- aproveitar custo Fibonacci no "fundo do poco" do Dia 0.
-        BUY_ANIMAL SHEEP 2 + COW 2 -- montar o Fixed Asset Engine imediatamente.
-        BUY_SEED WHEAT 7 + MELON 12 -- pipeline de plantio pronto para Hora 6.
-        Total: 9 ordens (dentro do limite MAX_MARKET_ORDERS=10).
+        Step 1 (hora 0-1): Golden Dump v13 — "Wide + Tall".
+
+        MUDANCAS vs v12:
+          + BUY_LAND agora esta na Hora 1 (dobra espaco NW->NW+NE imediatamente).
+          + BUY_SEED WHEAT 8 (mais trigo para cobrir os 50 tiles).
+          + BUY_SEED CARROT 4 (ciclo curto, demanda PET_CAFE + FARMERS_MARKET).
+          - Reduzido MELON para 4 (apenas para marcar valor premium no NW).
+          COW e SHEEP permanecem para o Fixed Asset Engine.
+        Total: 10 ordens (teto exato do MAX_MARKET_ORDERS).
+        """
+        return [
+            ["BUY_LAND"],                    # Desbloqueia NE na Hora 1
+            ["HIRE"],
+            ["HIRE"],
+            ["HIRE"],
+            ["HIRE"],
+            ["HIRE"],                         # 1a onda: 5x HIRE
+            ["BUY_ANIMAL", "COW",   2],
+            ["BUY_ANIMAL", "SHEEP", 2],
+            ["BUY_SEED",   "WHEAT", 8],
+            ["BUY_SEED",   "CARROT", 4],
+        ]   # = 10 ordens
+
+    @staticmethod
+    def _market_supply_hack():
+        """
+        Step 2 (hora 2): 2a Onda de Contratacao + Sementes para NE.
+
+        MUDANCAS vs v12:
+          - Remove BUY_PRODUCT WHEAT (nao necessario: FEED usa shed)
+          + 4x HIRE adicionais (total 9 peoes + fazendeiro = 10 trabalhadores)
+          + BUY_SEED WHEAT 4 e MELON 4 para cobrir os tiles NE recem-abertos.
+        Total: 7 ordens.
         """
         return [
             ["HIRE"],
             ["HIRE"],
             ["HIRE"],
-            ["HIRE"],
-            ["HIRE"],
-            ["BUY_ANIMAL", "SHEEP", 2],
-            ["BUY_ANIMAL", "COW",   2],
-            ["BUY_SEED",   "WHEAT", 7],
-            ["BUY_SEED",   "MELON", 12],
+            ["HIRE"],                         # 2a onda: +4 HIRE (total 9)
+            ["BUY_SEED", "WHEAT", 4],
+            ["BUY_SEED", "MELON", 4],
+            ["BUY_SEED", "CARROT", 4],
         ]
-
-    @staticmethod
-    def _market_supply_hack():
-        """
-        Step 2 (hora 2): Supply Hack.
-        BUY_PRODUCT WHEAT 4 -- HOTFIX: 1 trigo por animal (2 COW + 2 SHEEP = 4).
-        Trigo adulto direto do mercado para burlar o ciclo de crescimento.
-        """
-        return [["BUY_PRODUCT", "WHEAT", 4]]
 
     # -- Acao Individual de Worker por Fase --
 
@@ -182,12 +211,12 @@ class OpeningBook:
         inv   = inv   or {}
         seeds = seeds or {}
 
-        # ── SUPPLY_HACK (hora 2): rotas estritas por ator ──────────────────
-        # Evita colisao de inventario: cada ator pega exatamente o que vai usar.
-        #   Farmer (idx -1) : PICKUP COW  2  -> vai para INFRA_RUSH colocar vacas
-        #   Hand 0 (idx  0) : PICKUP SHEEP 2 -> vai para INFRA_RUSH colocar ovelhas
-        #   Hand 1 (idx  1) : PICKUP WHEAT 4 -> sera o alimentador no IGNITION
-        #   Demais (idx >=2): PASS           -> sem tarefa critica nesta fase
+        # SUPPLY_HACK (hora 2): 2a onda de HIRE ja foi para o mercado.
+        # Workers: Farmer e Hand 0 pegam animais; demais constroem/plantam.
+        #   Farmer (idx -1) : PICKUP COW  2  -> INFRA_RUSH: coloca vacas
+        #   Hand 0 (idx  0) : PICKUP SHEEP 2 -> INFRA_RUSH: coloca ovelhas
+        #   Hand 1+ (idx>=1): PASS           -> prontos para BUILD/PLANT
+        #   Obs: FEED usa trigo do SHED (nao de inventario dedicado).
         if phase == "supply_hack":
             if worker_idx == -1:
                 if inv.get("COW", 0) == 0 and shed.get("COW", 0) > 0:
@@ -195,9 +224,6 @@ class OpeningBook:
             elif worker_idx == 0:
                 if inv.get("SHEEP", 0) == 0 and shed.get("SHEEP", 0) > 0:
                     return ["PICKUP", "SHEEP", 2]
-            elif worker_idx == 1:
-                if inv.get("WHEAT", 0) == 0 and shed.get("WHEAT", 0) > 0:
-                    return ["PICKUP", "WHEAT", 4]
             return ["PASS"]
 
         # ── INFRA_RUSH (horas 3-5): construir PASTUREs + alocar animais ────
@@ -225,8 +251,8 @@ class OpeningBook:
             if tile is None:
                 return ["BUILD_PASTURE"]
 
-            # Mover em direcao ao tile vazio mais proximo do NW
-            target = self._find_empty_tile(tiles, nw_only=True)
+            # Mover em direcao ao tile vazio mais proximo (NW + NE)
+            target = self._find_empty_tile(tiles, top_half_only=True)
             if target and target != (x, y):
                 return self._navigate(pos, target)
             return ["PASS"]
@@ -236,11 +262,10 @@ class OpeningBook:
             # Prioridade 1: acao direta sobre tile atual (animal)
             if isinstance(tile, dict) and tile.get("kind") in ("COOP", "PASTURE"):
                 if tile.get("animal"):
-                    # HOTFIX: FEED so e enviado se o ATOR tem WHEAT no inventario.
-                    # Hand 1 (worker_idx==1) pegou WHEAT 4 no SUPPLY_HACK; os demais
-                    # nao tem trigo e nao devem tentar alimentar (evita penalidade).
-                    can_feed = inv.get("WHEAT", 0) > 0
-                    if not tile.get("fed_today") and can_feed:
+                    # v13: FEED usa WHEAT do SHED (nao do inventario do ator).
+                    # Qualquer peao pode alimentar, sem gargalo de portador.
+                    # Guard: shed deve ter trigo disponivel.
+                    if not tile.get("fed_today") and shed.get("WHEAT", 0) > 0:
                         return ["FEED"]
                     if not tile.get("cared_today"):
                         return ["CARE"]
@@ -261,15 +286,14 @@ class OpeningBook:
                 for rx, t in enumerate(row if isinstance(row, list) else []):
                     if not (isinstance(t, dict) and t.get("kind") in ("COOP", "PASTURE") and t.get("animal")):
                         continue
-                    needs_feed  = not t.get("fed_today")  and inv.get("WHEAT", 0) > 0
-                    needs_care  = not t.get("cared_today")
+                    needs_feed = not t.get("fed_today")  and shed.get("WHEAT", 0) > 0
+                    needs_care = not t.get("cared_today")
                     if (needs_feed or needs_care) and (rx, ry) != (x, y):
                         return self._navigate(pos, (rx, ry))
 
-            # Prioridade 4: navegar ate tile vazio para plantar (quadrante NW)
-            # HOTFIX: so navega para plantar se houver semente disponivel.
-            if any(seeds.get(c, 0) > 0 for c in ("MELON", "WHEAT")):
-                target = self._find_empty_tile(tiles, nw_only=True)
+            # Prioridade 4: navegar ate tile vazio para plantar (NW + NE)
+            if any(seeds.get(c, 0) > 0 for c in ("MELON", "WHEAT", "CARROT")):
+                target = self._find_empty_tile(tiles, top_half_only=True)
                 if target and target != (x, y):
                     return self._navigate(pos, target)
 
@@ -315,7 +339,7 @@ class OpeningBook:
         farmer_act = self._worker_action(phase, farmer_pos, farmer_inv, tiles, shed, seeds,
                                          worker_idx=-1)
 
-        # Acoes dos peoes contratados (worker_idx=i: 0=SHEEP, 1=WHEAT/feed, 2+=extras)
+        # Acoes dos peoes contratados (worker_idx=i: 0=SHEEP, 1+=BUILD/PLANT/CARE)
         hands_acts = []
         for i, hpos in enumerate(farm.get("hands") or []):
             h_inv = invs[i + 1] if i + 1 < len(invs) else {}
@@ -330,10 +354,10 @@ class OpeningBook:
 # =============================================================================
 # ENGINE DINAMICO -- Mid/Late Game (v11, com todos os hotfixes)
 # =============================================================================
-class KaggricultureAgentV12:
+class KaggricultureAgentV13:
     """
-    Agente principal v12.
-    - Dia 0, hora < 10  -> OpeningBook (Golden Path deterministico)
+    Agente principal v13 -- "Wide + Tall Meta".
+    - Dia 0, hora < 10  -> OpeningBook v13 (BUY_LAND Hora1 + 9 peoes + sementes NW+NE)
     - Dia 0, hora >= 10 e demais dias -> Engine dinamica v11 com hotfixes:
         Anti-Weed Lock  : PASS em vez de PLANT se hour >= 23
         Fertilizer Sell : vender FERTILIZER excedente (manter <= 10 unidades)
@@ -600,9 +624,8 @@ class KaggricultureAgentV12:
             if sell_qty > 0:
                 orders.append(["SELL", item, sell_qty])
 
-        # BUY_LAND (prioridade alta, antes das sementes)
-        # v12: NAO comprar terra durante o Opening Book (Tall Meta).
-        # No mid/late game, so compra se tiver margem financeira confortavel.
+        # BUY_LAND (mid/late game): Opening Book ja comprou a 1a terra na Hora 1.
+        # A partir do dia 1, compra quadrantes adicionais se houver margem.
         LAND_RESERVE = 600
         if day > 0 and n_quadrants < 4 and money > land_cost + LAND_RESERVE:
             orders.append(["BUY_LAND"])
@@ -769,8 +792,8 @@ class KaggricultureAgentV12:
 
 
 # =============================================================================
-# ENTRY POINTS (compatíveis com a arena Kaggle)
+# ENTRY POINTS (compativeis com a arena Kaggle)
 # =============================================================================
-agent = KaggricultureAgentV12()
+agent = KaggricultureAgentV13()
 def agent_fn(observation, configuration=None):   return agent(observation)
 def main_agent(observation, configuration=None): return agent(observation)
