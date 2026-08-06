@@ -1,6 +1,6 @@
-# 🚜 Manual de Regras e Prioridades do Agente (Kaggriculture) — v9
+# 🚜 Manual de Regras e Prioridades do Agente (Kaggriculture) — v10
 
-Este documento define a Árvore de Decisão e as regras de negócio que o agente autônomo deve seguir a cada turno da simulação. Versão atual: **v9 Masterpiece**.
+Este documento define a Árvore de Decisão e as regras de negócio que o agente autônomo deve seguir a cada turno da simulação. Versão atual: **v10 Early Game Acelerado**.
 
 ---
 
@@ -49,8 +49,34 @@ Antes de qualquer ação no campo, o agente organiza finanças e inventário.
 - Respeita `MAX_MARKET_ORDERS = 10`.
 
 ### 1.3 — Expansão e Contratação
-- **BUY_LAND**: se `money > 1500 × len(unlocked_quadrants)` e há quadrantes disponíveis.
-- **HIRE**: se `urgent_tasks > 12` (água + comida + colheita pendentes), `money > 500` e 0 hands ativos.
+
+**BUY_LAND (v10 — custo real + prioridade):**
+- Tabela `LAND_COST = {1: 1000, 2: 2000, 3: 4000}` mapeia n° de quadrantes já desbloqueados → custo exato do próximo.
+- Condição de compra: `money > land_cost + 500` (reserva operacional de $500 pós-compra).
+- **BUY_LAND é emitido ANTES das ordens de semente**, garantindo que nunca seja cortado pelo limite de 10 ordens.
+
+**HIRE (v10 — threshold adaptativo ao estágio do jogo):**
+
+| Fase | Dias | Threshold de tarefas urgentes | Reserva mínima de caixa |
+|------|------|-------------------------------|-------------------------|
+| Early | 0–5 | ≥ 3 tarefas | $200 |
+| Mid-Early | 6–10 | ≥ 6 tarefas | $400 |
+| Late | 11+ | ≥ 12 tarefas | $500 (comportamento v9) |
+
+- Contrata apenas se não há hands ativos (`len(hands) == 0`).
+- Fibonacci nos dias iniciais (custo 1–5 moedas) → ROI imediato com qualquer tarefa pendente.
+
+**Seed Targets (v10 — escalados por quadrantes):**
+
+| Quadrantes desbloqueados | MELON | WHEAT | CARROT | TOMATO | STRAWBERRY |
+|--------------------------|-------|-------|--------|--------|------------|
+| 1 (inicial) | 4 | 6 | 4 | 2 | 2 |
+| 2 | 6 | 8 | 5 | 3 | 3 |
+| ≥ 3 | 8 | 10 | 6 | 4 | 4 |
+
+**Reserva de capital dinâmica:**
+- `seed_reserve = max(200, land_cost // 2)` — guarda metade do custo do próximo quadrante antes de comprar sementes.
+- Evita gastar tudo em seeds e ficar sem capital para a expansão iminente.
 
 ### 1.4 — Liquidação Fim-de-Temporada (dia ≥ 27)
 - A partir do dia 27, vende **todos** os itens do shed (exceto animais vivos) sem reservas.
@@ -154,3 +180,4 @@ Para cada unidade (farmer/hand), avalia-se o tile em que ela se encontra:
 | `SHED_HARD_CAP` | 100 | Capacidade máxima do shed |
 | `PREMIUM_THRESHOLD` | 100 | Preço base acima do qual o produto é considerado "premium" |
 | `PLANT_PRIORITY` | MELON > STRAWBERRY > TOMATO > CARROT > WHEAT | Ordem de valor para escolha de plantio |
+| `LAND_COST` | `{1: 1000, 2: 2000, 3: 4000}` | Custo real de BUY_LAND por quadrantes já desbloqueados |

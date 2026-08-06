@@ -5,7 +5,7 @@
 ![License](https://img.shields.io/badge/License-MIT-green?logo=open-source-initiative&logoColor=white)
 ![Status](https://img.shields.io/badge/Status-Active-brightgreen?logo=statuspage&logoColor=white)
 ![Score](https://img.shields.io/badge/Skill_Rating-390.3-success?logo=trending&logoColor=white)
-![Version](https://img.shields.io/badge/Current_Version-v9-blueviolet?logo=git&logoColor=white)
+![Version](https://img.shields.io/badge/Current_Version-v10-blueviolet?logo=git&logoColor=white)
 
 > Um agente autônomo em Python, desenvolvido iterativamente para a competição de simulação **Kaggriculture** da Kaggle. Projeto construído com auxílio do **KiloCode CLI** e versionado via Git.
 
@@ -60,7 +60,8 @@ O agente atravessou nove iterações principais. As versões **v1–v6** foram c
 | **v6** | Venda curativa de overflow, plantio por valor, fertilizante reservado p/ Melão, correção de bug do tile vazio. | Threshold duplo shed + parse robusto | `300.6` | — |
 | **v7** | **Reescrita completa contra o schema oficial** — 5 culturas, pecuária completa, vendas com reserva. | Schema oficial + decisões one-time vs ongoing | **`390.3`** | ▲ |
 | **v8** | BFS pathfinding, expansão agressiva, contratação inteligente de peões, construção de estruturas. | `BUILD_COOP`/`BUILD_PASTURE` + `HIRE` + `BUY_LAND` + BFS | TBD | — |
-| **v9** *(Atual)* ⭐ | **Táticas Avançadas**: Espionagem industrial, Horizonte de Eventos (corte de plantio), Flush Noturno preventivo. | Espionagem de oponente + corte fim-de-temporada + flush hour≥22 | TBD | — |
+| **v9** | **Táticas Avançadas**: Espionagem industrial, Horizonte de Eventos (corte de plantio), Flush Noturno preventivo. | Espionagem de oponente + corte fim-de-temporada + flush hour≥22 | TBD | — |
+| **v10** *(Atual)* ⭐ | **Early Game Acelerado**: BUY_LAND com custo real, HIRE adaptativo por fase, seed_targets escalados por quadrante, reserva de capital dinâmica. | `LAND_COST` table + HIRE threshold por dia + seeds escalonados | TBD | — |
 
 > 🔎 **Nota técnica:** skill rating é um valor Elo-like. A relação com "uma versão mais complexa = mais rating" **não é linear** — depende de quem o bot enfrenta naquele momento. Scores aqui são o rating **publicado** pela Kaggle no leaderboard, não o desempenho direto de moedas.
 
@@ -183,6 +184,34 @@ Otimização do reabastecimento condicional de sementes, com prioridade a Melão
 - <code>self.animals_bought</code> agora é incrementado em cada <code>PICKUP</code> de animal do shed, destravando a lógica de construção de COOPs adicionais.
 - Variável não utilizada <code>town_shops</code> removida.
 - Lógica <code>valid_crops</code> extraída para <code>_get_valid_crops()</code>, eliminando duplicação.
+</details>
+
+<details>
+<summary><b>v10 — Early Game Acelerado</b> <i>(Skill: TBD)</i> ⭐ — <i>versão atual</i></summary>
+
+> A versão atual, presente no arquivo <code>submission.py</code>.
+
+**Problema resolvido:** o agente v9 perdia no Dia 6 para oponentes que escalavam mais rápido, por três ineficiências no early game.
+
+**Mudança 1 — BUY_LAND com custo real:**
+- Tabela `LAND_COST = {1: 1000, 2: 2000, 3: 4000}` substitui a fórmula imprecisa `1500 × quadrantes`.
+- Threshold: `money > land_cost + 500` (reserva pós-compra).
+- BUY_LAND é emitido **antes das ordens de semente**, garantindo prioridade máxima dentro do limite de 10 ordens.
+
+**Mudança 2 — HIRE adaptativo:**
+- Dias 0–5: contrata com ≥ 3 tarefas urgentes e $200 no caixa (Fibonacci ≈ 1–3 moedas).
+- Dias 6–10: threshold de 6 tarefas e $400 de reserva.
+- Dias 11+: comportamento original (12 tarefas, $500).
+
+**Mudança 3 — Seed targets escalados por quadrante:**
+- 1 quadrante: targets originais (MELON=4, WHEAT=6, ...).
+- 2 quadrantes: MELON=6, WHEAT=8, CARROT=5, TOMATO=3, STRAWBERRY=3.
+- ≥3 quadrantes: MELON=8, WHEAT=10, CARROT=6, TOMATO=4, STRAWBERRY=4.
+
+**Mudança 4 — Reserva de capital dinâmica:**
+- `seed_reserve = max(200, land_cost // 2)` — guarda metade do custo do próximo quadrante antes de comprar seeds.
+- Garante que o capital não fique preso em sementes quando a compra de terra está iminente.
+
 </details>
 
 ---

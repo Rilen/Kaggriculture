@@ -1,8 +1,10 @@
 """
-Kaggriculture Autonomous AI Agent — Version 9 (v9)
+Kaggriculture Autonomous AI Agent — Version 10 (v10)
 
 [v8] BFS + Expansao + Pecuaria + Arbitragem Municipal
 [v9] Horizonte de Eventos + Espionagem do Oponente + Hour 23 Flush
+[v10] Early Game Acelerado: BUY_LAND com custo real, HIRE adaptativo,
+      seed_targets escalados por quadrante, reserva de capital dinâmica
 """
 
 from collections import deque
@@ -39,8 +41,12 @@ SHED_SOFT_CAP = 75
 PREMIUM_THRESHOLD = 100
 SHED_HARD_CAP = 100
 
+# Custo real escalonado de BUY_LAND (1º adicional=$1k, 2º=$2k, 3º=$4k)
+# A chave é o número de quadrantes JÁ desbloqueados antes da compra.
+LAND_COST: dict[int, int] = {1: 1000, 2: 2000, 3: 4000}
 
-class KaggricultureAgentV9:
+
+class KaggricultureAgentV10:
     def __init__(self):
         self.last_day = -1
         self.watered_this_day = set()
@@ -217,7 +223,11 @@ class KaggricultureAgentV9:
         self._track_prices(step, prices)
         if day >= 27: return self._build_liquidation_orders(shed)
 
-        orders = []
+        # v10: número de quadrantes desbloqueados e custo real do próximo
+        n_quadrants = len(farm.get("unlocked_quadrants", []))
+        land_cost = LAND_COST.get(n_quadrants, 9999)  # custo real do próximo quadrante
+
+        orders: list[list] = []
         total_shed = sum(shed.values())
 
         # TÁTICA 3: FLUSH PREVENTIVO
@@ -228,15 +238,15 @@ class KaggricultureAgentV9:
         force_sell = panic_flush or (total_shed > SHED_SOFT_CAP)
 
         animal_count = sum(1 for row in farm.get("tiles", []) for tile in row if isinstance(tile, dict) and tile.get("animal"))
-        
+
         # TÁTICA 2: ESPIONAGEM INDUSTRIAL (Scout Oponente)
         op_melons = sum(1 for row in op_farm.get("tiles", []) for tile in row if isinstance(tile, dict) and tile.get("crop") == "MELON")
         op_flooding_melon = op_melons > 8
 
-        # Ordens de Venda
+        # --- BLOCO DE VENDAS ---
         for item, qty in sorted(shed.items()):
             if qty <= 0 or item in ("GOOSE", "COW", "SHEEP"): continue
-            
+
             # Se oponente vai quebrar o preço do Melão, vendemos TUDO que temos dele agora!
             if item == "MELON" and op_flooding_melon:
                 orders.append(["SELL", item, qty])
@@ -248,29 +258,56 @@ class KaggricultureAgentV9:
                 keep = 0 if panic_flush else (5 if force_sell else qty)
             else:
                 keep = 0 if force_sell else 3
-            
+
             sell_qty = qty - keep
             if sell_qty > 0: orders.append(["SELL", item, sell_qty])
 
-        # HIRE e Expansão
-        urgent = len(tasks.get("water_needed", [])) + len(tasks.get("feed_needed", [])) + len(tasks.get("harvest_ready", []))
-        if urgent > 12 and money > 500 and len(farm.get("hands", [])) == 0: orders.append(["HIRE"])
-        if len(farm.get("unlocked_quadrants", [])) < 4 and money > (1500 * len(farm.get("unlocked_quadrants", []))):
+        # --- v10 MUDANÇA 1: BUY_LAND com custo real e prioridade ALTA ---
+        # Colocamos ANTES das sementes para garantir que não seja cortado pelo limite de 10 ordens.
+        # Reserva de $500 pós-compra para manter operações rodando.
+        LAND_RESERVE = 500
+        if n_quadrants < 4 and money > land_cost + LAND_RESERVE:
             orders.append(["BUY_LAND"])
+            # Não subtrai money aqui pois BUY_LAND é ordem de mercado assíncrona;
+            # mas consideramos o custo na reserva das sementes abaixo.
+
+        # --- v10 MUDANÇA 2: HIRE adaptativo ao estágio do jogo ---
+        # Fibonacci nos dias iniciais: custo 1–3 moedas → ROI imediato.
+        urgent = len(tasks.get("water_needed", [])) + len(tasks.get("feed_needed", [])) + len(tasks.get("harvest_ready", []))
+        if day <= 5:
+            hire_threshold, hire_reserve = 3, 200    # Early: contrata com 3 tarefas, guarda só $200
+        elif day <= 10:
+            hire_threshold, hire_reserve = 6, 400    # Mid-early: 6 tarefas, $400
+        else:
+            hire_threshold, hire_reserve = 12, 500   # Late: comportamento original
+        if urgent >= hire_threshold and money > hire_reserve and len(farm.get("hands", [])) == 0:
+            orders.append(["HIRE"])
 
         # TÁTICA 1: HORIZONTE DE EVENTOS (Corte de Sementes)
         valid_crops = self._get_valid_crops(day, op_flooding_melon)
 
-        # Compras de sementes (apenas as que tem tempo de crescer)
-        seed_targets = {"MELON": 4, "WHEAT": 6, "CARROT": 4, "TOMATO": 2, "STRAWBERRY": 2}
+        # --- v10 MUDANÇA 3 & 4: seed_targets escalados + reserva de capital dinâmica ---
+        # Targets maiores ao desbloquear mais terra para manter o pipeline cheio.
+        if n_quadrants >= 3:
+            seed_targets = {"MELON": 8, "WHEAT": 10, "CARROT": 6, "TOMATO": 4, "STRAWBERRY": 4}
+        elif n_quadrants >= 2:
+            seed_targets = {"MELON": 6, "WHEAT": 8,  "CARROT": 5, "TOMATO": 3, "STRAWBERRY": 3}
+        else:
+            seed_targets = {"MELON": 4, "WHEAT": 6,  "CARROT": 4, "TOMATO": 2, "STRAWBERRY": 2}
+
+        # Reserva dinâmica: se ainda vamos comprar terra, guarda metade do custo antes de seeds.
+        pending_land = land_cost if n_quadrants < 4 else 0
+        seed_reserve = max(200, pending_land // 2)
+
         for crop in PLANT_PRIORITY:
             if crop not in valid_crops: continue
             have = seeds.get(crop, 0)
             if have < seed_targets[crop] and len(orders) < MAX_MARKET_ORDERS:
                 need = seed_targets[crop] - have
-                if money >= (CROPS[crop]["seed_cost"] * need) + 200:
+                cost = CROPS[crop]["seed_cost"] * need
+                if money >= cost + seed_reserve:
                     orders.append(["BUY_SEED", crop, need])
-                    money -= CROPS[crop]["seed_cost"] * need
+                    money -= cost
 
         return orders[:MAX_MARKET_ORDERS]
 
@@ -368,6 +405,6 @@ class KaggricultureAgentV9:
         return {"farmer": farmer_action, "hands": hands_actions, "market": market_orders}
 
 
-agent = KaggricultureAgentV9()
+agent = KaggricultureAgentV10()
 def agent_fn(observation, configuration=None): return agent(observation)
 def main_agent(observation, configuration=None): return agent(observation)
