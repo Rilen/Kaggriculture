@@ -156,39 +156,57 @@ class OpeningBook:
     def _market_supply_hack():
         """
         Step 2 (hora 2): Supply Hack.
-        BUY_PRODUCT WHEAT 2 -- trigo adulto direto do mercado para
-        burlar o ciclo de crescimento e alimentar animais ja na Hora 6.
+        BUY_PRODUCT WHEAT 4 -- HOTFIX: 1 trigo por animal (2 COW + 2 SHEEP = 4).
+        Trigo adulto direto do mercado para burlar o ciclo de crescimento.
         """
-        return [["BUY_PRODUCT", "WHEAT", 2]]
+        return [["BUY_PRODUCT", "WHEAT", 4]]
 
     # -- Acao Individual de Worker por Fase --
 
-    def _worker_action(self, phase, pos, inv, tiles, shed, seeds):
-        """Determina a acao de UM worker (fazendeiro ou peao) no Opening Book."""
+    def _worker_action(self, phase, pos, inv, tiles, shed, seeds, worker_idx=0):
+        """
+        Determina a acao de UM worker no Opening Book.
+
+        worker_idx:
+          -1 = fazendeiro principal (farmer)
+           0 = hand 0 (primeiro peao contratado)
+           1 = hand 1 (segundo peao contratado)
+           N >= 2 = peoes extras (sem tarefa critica no opening)
+        """
         x, y  = pos
         tile  = self._tile_at(tiles, x, y)
         inv   = inv   or {}
         seeds = seeds or {}
-        inv_t = sum(inv.values())
 
-        # SUPPLY_HACK (hora 2): pickup de animais do shed
+        # ── SUPPLY_HACK (hora 2): rotas estritas por ator ──────────────────
+        # Evita colisao de inventario: cada ator pega exatamente o que vai usar.
+        #   Farmer (idx -1) : PICKUP COW  2  -> vai para INFRA_RUSH colocar vacas
+        #   Hand 0 (idx  0) : PICKUP SHEEP 2 -> vai para INFRA_RUSH colocar ovelhas
+        #   Hand 1 (idx  1) : PICKUP WHEAT 4 -> sera o alimentador no IGNITION
+        #   Demais (idx >=2): PASS           -> sem tarefa critica nesta fase
         if phase == "supply_hack":
-            if inv_t == 0:
-                for atype in ("COW", "SHEEP", "GOOSE"):
-                    if shed.get(atype, 0) > 0:
-                        return ["PICKUP", atype, 1]
+            if worker_idx == -1:
+                if inv.get("COW", 0) == 0 and shed.get("COW", 0) > 0:
+                    return ["PICKUP", "COW", 2]
+            elif worker_idx == 0:
+                if inv.get("SHEEP", 0) == 0 and shed.get("SHEEP", 0) > 0:
+                    return ["PICKUP", "SHEEP", 2]
+            elif worker_idx == 1:
+                if inv.get("WHEAT", 0) == 0 and shed.get("WHEAT", 0) > 0:
+                    return ["PICKUP", "WHEAT", 4]
             return ["PASS"]
 
-        # INFRA_RUSH (horas 3-5): construir PASTUREs + alocar animais
+        # ── INFRA_RUSH (horas 3-5): construir PASTUREs + alocar animais ────
         if phase == "infra_rush":
+            # Validacao: apenas atores que carregam um animal COW/SHEEP fazem PLACE
             carrying = {a for a in ("COW", "SHEEP", "GOOSE") if inv.get(a, 0) > 0}
 
             # Esta sobre pastagem vazia -> alocar o animal que carrega
             if isinstance(tile, dict) and tile.get("kind") == "PASTURE" and not tile.get("animal"):
                 for atype in ("COW", "SHEEP"):
-                    if atype in carrying:
+                    if atype in carrying:           # guard: tem o animal no inv
                         return ["PLACE", atype]
-                return ["PASS"]
+                return ["PASS"]                    # sem animal -> aguarda
 
             # Esta carregando animal -> navegar ate pastagem vazia mais proxima
             if carrying:
@@ -209,12 +227,16 @@ class OpeningBook:
                 return self._navigate(pos, target)
             return ["PASS"]
 
-        # IGNITION (horas 6-9): alimentar/cuidar animais + plantar
+        # ── IGNITION (horas 6-9): alimentar/cuidar animais + plantar ────────
         if phase == "ignition":
             # Prioridade 1: acao direta sobre tile atual (animal)
             if isinstance(tile, dict) and tile.get("kind") in ("COOP", "PASTURE"):
                 if tile.get("animal"):
-                    if not tile.get("fed_today") and shed.get("WHEAT", 0) > 0:
+                    # HOTFIX: FEED so e enviado se o ATOR tem WHEAT no inventario.
+                    # Hand 1 (worker_idx==1) pegou WHEAT 4 no SUPPLY_HACK; os demais
+                    # nao tem trigo e nao devem tentar alimentar (evita penalidade).
+                    can_feed = inv.get("WHEAT", 0) > 0
+                    if not tile.get("fed_today") and can_feed:
                         return ["FEED"]
                     if not tile.get("cared_today"):
                         return ["CARE"]
@@ -224,23 +246,28 @@ class OpeningBook:
             # Prioridade 2: plantar na tile atual (MELON > WHEAT)
             if tile is None:
                 for crop in ("MELON", "WHEAT"):
+                    # HOTFIX: valida disponibilidade de sementes antes de PLANT.
                     if seeds.get(crop, 0) > 0:
                         return ["PLANT", crop]
 
             # Prioridade 3: navegar ate animal nao tratado
+            # Para o Hand 1 (com trigo), prioriza animals nao alimentados.
+            # Para os demais, prioriza animals nao cuidados (CARE).
             for ry, row in enumerate(tiles):
                 for rx, t in enumerate(row if isinstance(row, list) else []):
-                    if (isinstance(t, dict)
-                            and t.get("kind") in ("COOP", "PASTURE")
-                            and t.get("animal")
-                            and (not t.get("fed_today") or not t.get("cared_today"))
-                            and (rx, ry) != (x, y)):
+                    if not (isinstance(t, dict) and t.get("kind") in ("COOP", "PASTURE") and t.get("animal")):
+                        continue
+                    needs_feed  = not t.get("fed_today")  and inv.get("WHEAT", 0) > 0
+                    needs_care  = not t.get("cared_today")
+                    if (needs_feed or needs_care) and (rx, ry) != (x, y):
                         return self._navigate(pos, (rx, ry))
 
             # Prioridade 4: navegar ate tile vazio para plantar (quadrante NW)
-            target = self._find_empty_tile(tiles, nw_only=True)
-            if target and target != (x, y):
-                return self._navigate(pos, target)
+            # HOTFIX: so navega para plantar se houver semente disponivel.
+            if any(seeds.get(c, 0) > 0 for c in ("MELON", "WHEAT")):
+                target = self._find_empty_tile(tiles, nw_only=True)
+                if target and target != (x, y):
+                    return self._navigate(pos, target)
 
             return ["PASS"]
 
@@ -278,17 +305,19 @@ class OpeningBook:
         else:
             market = []
 
-        # Acao do fazendeiro principal
+        # Acao do fazendeiro principal (worker_idx=-1 = rota exclusiva de COW)
         farmer_pos = farm.get("farmer") or [0, 0]
         farmer_inv = invs[0] if invs else {}
-        farmer_act = self._worker_action(phase, farmer_pos, farmer_inv, tiles, shed, seeds)
+        farmer_act = self._worker_action(phase, farmer_pos, farmer_inv, tiles, shed, seeds,
+                                         worker_idx=-1)
 
-        # Acoes dos peoes contratados
+        # Acoes dos peoes contratados (worker_idx=i: 0=SHEEP, 1=WHEAT/feed, 2+=extras)
         hands_acts = []
         for i, hpos in enumerate(farm.get("hands") or []):
             h_inv = invs[i + 1] if i + 1 < len(invs) else {}
             hands_acts.append(
-                self._worker_action(phase, hpos, h_inv, tiles, shed, seeds)
+                self._worker_action(phase, hpos, h_inv, tiles, shed, seeds,
+                                    worker_idx=i)
             )
 
         return {"farmer": farmer_act, "hands": hands_acts, "market": market}
