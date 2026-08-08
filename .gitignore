@@ -38,6 +38,7 @@ submission_*_backup.py
 submission_v17_3_a*.py
 submission_v18*.py
 submission_v15_restored.py
+submission_a*.py
 
 # Scripts de análise/benchmark
 analysis.py
@@ -61,7 +62,7 @@ a*_*.md
 intercepted.json
 diffs.txt
 
-# Arquivos de dados Kaggle baixados
+# Arquivos temporários de deploy
 *.tar.gz
 *.zip
 kaggriculture-episodes-*/
