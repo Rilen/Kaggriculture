@@ -637,6 +637,23 @@ class KaggricultureAgentV17:
         return ["PASS"]
 
     # -------------------------------------------------------------------------
+    # A.10 — CARE Timing Filter
+    # -------------------------------------------------------------------------
+    @staticmethod
+    def _expected_days_to_yield(tile, day):
+        animal = tile.get("animal")
+        if animal == "COW": interval = 2
+        elif animal == "SHEEP": interval = 3
+        elif animal == "GOOSE": interval = 1
+        else: return 99
+        if tile.get("yield_units", 0) > 0:
+            return 0
+        return interval
+
+    def _is_care_valuable(self, tile, day):
+        return self._expected_days_to_yield(tile, day) < 3
+
+    # -------------------------------------------------------------------------
     # _move_priorities — v17.1 Cirurgia B: emergency build + fallback
     # -------------------------------------------------------------------------
     def _move_priorities(self, shed, day, inv, empty_past=0):
@@ -652,10 +669,11 @@ class KaggricultureAgentV17:
                              and t.get("animal") and not t.get("fed_today")
                              and (x, y) not in self.fed_this_day
                              and (shed.get("WHEAT", 0) > 0 or inv.get("WHEAT", 0) > 0)),
-            # 3. CARE
+            # 3. CARE — A.10: only if expected days to yield < 3 (~57 steps)
             lambda t, x, y: (isinstance(t, dict) and t.get("kind") == "PASTURE"
                              and t.get("animal") and not t.get("cared_today")
-                             and (x, y) not in self.cared_this_day),
+                             and (x, y) not in self.cared_this_day
+                             and self._is_care_valuable(t, day)),
             # 4. HARVEST
             lambda t, x, y: (isinstance(t, dict)
                              and ((t.get("kind") == "PASTURE" and t.get("yield_units", 0) > 0)
