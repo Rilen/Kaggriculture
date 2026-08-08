@@ -53,11 +53,11 @@ from collections import deque
 # CONSTANTES
 # =============================================================================
 CROPS = {
-    "WHEAT":      {"first": 2,  "max": 4,  "seed_cost": 10,  "price": 25},
-    "CARROT":     {"first": 2,  "max": 3,  "seed_cost": 20,  "price": 35},
-    "TOMATO":     {"first": 8,  "max": 11, "seed_cost": 50,  "price": 60},
-    "STRAWBERRY": {"first": 10, "max": 16, "seed_cost": 100, "price": 120},
-    "MELON":      {"first": 10, "max": 10, "seed_cost": 80,  "price": 250},
+    "WHEAT":      {"first": 2,  "max": 4,  "seed_cost": 10,  "price": 25,  "ongoing": False, "interval": 0, "max_yield": 6},
+    "CARROT":     {"first": 2,  "max": 3,  "seed_cost": 20,  "price": 35,  "ongoing": False, "interval": 0, "max_yield": 4},
+    "TOMATO":     {"first": 8,  "max": 8,  "seed_cost": 50,  "price": 60,  "ongoing": True,  "interval": 1, "max_yield": 4},
+    "STRAWBERRY": {"first": 10, "max": 10, "seed_cost": 100, "price": 120, "ongoing": True,  "interval": 2, "max_yield": 4},
+    "MELON":      {"first": 10, "max": 12, "seed_cost": 80,  "price": 250, "ongoing": False, "interval": 0, "max_yield": 6},
 }
 
 ANIMALS = {
@@ -270,6 +270,8 @@ class KaggricultureAgentV17:
         self.fed_this_day     = set()
         self.cared_this_day   = set()
         self.worker_history   = {}
+        self.worker_targets   = {}
+        self.worker_failures  = {}
         self.telemetry = {
             "invalid_action_intercepted": 0,
             "feed_precondition_fail": 0,
@@ -280,6 +282,14 @@ class KaggricultureAgentV17:
             "circuit_breaker_triggered": 0,
             "replan_count": 0,
             "max_consecutive_same_intent": 0,
+            "target_claims": 0,
+            "target_releases": 0,
+            "target_changes": 0,
+            "target_persistence_turns": 0,
+            "claims_released_on_arrival": 0,
+            "claims_released_after_productive_action": 0,
+            "claims_released_due_to_invalid_target": 0,
+            "claims_released_due_to_unreachable_target": 0,
         }
 
     @staticmethod
@@ -470,43 +480,48 @@ class KaggricultureAgentV17:
                 money -= buy_n * wheat_price
 
         # HIRE adaptativo — identico ao v15
+        # A.8: hire targets — 12+ workers for WATER pipeline (meta uses 12-15)
         fib = [1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144]
         if day == 1:
             target_h = 0
         elif day <= 3:
-            target_h = 4
+            target_h = 8
         elif day <= 6:
-            target_h = 5
-        elif day <= 9:
-            target_h = 8
-        elif day <= 14:
             target_h = 11
+        elif day <= 9:
+            target_h = 14
+        elif day <= 14:
+            target_h = 14
+        elif day <= 20:
+            target_h = 13
         else:
-            target_h = 8
+            target_h = 10
 
         urgent = (len(tasks["feed"]) + len(tasks["care"])
                   + len(tasks["harvest"]) + len(tasks["water"]))
         if urgent > 15:
-            target_h = min(target_h + 3, 14)
+            target_h = min(target_h + 3, 15)
 
         needed   = max(0, target_h - current_hands)
         cost_est = sum(fib[min(hires_today + i, len(fib) - 1)] for i in range(needed))
-        reserve  = 30 if day <= 3 else (100 if day <= 8 else 300)
+        reserve  = 400 if day <= 1 else (200 if day <= 3 else (100 if day <= 8 else 300))
 
         if needed > 0 and money > cost_est + reserve:
             for i in range(min(needed, MAX_MARKET_ORDERS - len(orders))):
                 orders.append(["HIRE"])
                 money -= fib[min(hires_today + i, len(fib) - 1)]
 
-        # BUY_ANIMAL — identico ao v15
+        # BUY_ANIMAL — A.8: adaptive herd targets based on opponent
+        tgt_cow = getattr(self, 'adj_cow', TARGET_COW)
+        tgt_sheep = getattr(self, 'adj_sheep', TARGET_SHEEP)
         if day >= 3 and day <= 15 and money > 600 and len(orders) < MAX_MARKET_ORDERS:
-            if cows < TARGET_COW and (empty_past > 0 or pastures < TARGET_PASTURES):
-                n = min(2, TARGET_COW - cows, max(1, empty_past))
+            if cows < tgt_cow and (empty_past > 0 or pastures < TARGET_PASTURES):
+                n = min(2, tgt_cow - cows, max(1, empty_past))
                 if money > 400 * n + 200:
                     orders.append(["BUY_ANIMAL", "COW", n])
                     money -= 400 * n
-            elif sheep < TARGET_SHEEP and (empty_past > 0 or pastures < TARGET_PASTURES):
-                n = min(2, TARGET_SHEEP - sheep, max(1, empty_past))
+            if sheep < tgt_sheep and (empty_past > 0 or pastures < TARGET_PASTURES):
+                n = min(2, tgt_sheep - sheep, max(1, empty_past))
                 if money > 500 * n + 200:
                     orders.append(["BUY_ANIMAL", "SHEEP", n])
                     money -= 500 * n
@@ -523,14 +538,14 @@ class KaggricultureAgentV17:
 
         # Seeds — MUDANCA 5: adiciona STRAWBERRY conservadora
         if day <= 15 and len(orders) < MAX_MARKET_ORDERS:
-            # STRAWBERRY: alto valor + demanda de lojas, ciclo longo — compra conservadora
+            # A.8: STRAWBERRY seeds — meta uses 42 tiles, need 8+ seeds
             strw_have = seeds.get("STRAWBERRY", 0)
-            if (strw_have < 3
+            if (strw_have < 8
                     and days_left >= STRAWBERRY_MIN_DAYS_LEFT
-                    and money > 1200
+                    and money > 800
                     and len(orders) < MAX_MARKET_ORDERS):
-                need = min(3 - strw_have, 2)
-                if money > 100 * need + 800:
+                need = min(4, 8 - strw_have)
+                if money > 100 * need + 400:
                     orders.append(["BUY_SEED", "STRAWBERRY", need])
                     money -= 100 * need
 
@@ -551,7 +566,7 @@ class KaggricultureAgentV17:
     # -------------------------------------------------------------------------
     # _decide — v17.1 Cirurgia A: PLANT desacoplado de BUILD_PASTURE
     # -------------------------------------------------------------------------
-    def _decide(self, tile, shed, seeds, day, inv, pos, hour, cows, sheep, empty_past):
+    def _decide(self, tile, shed, seeds, day, inv, pos, hour, cows, sheep, empty_past, total_crops=0):
         inv  = inv or {}
         x, y = pos if pos else (-1, -1)
 
@@ -576,13 +591,12 @@ class KaggricultureAgentV17:
             if animal_in_shed > 0 and empty_past == 0 and day <= 15:
                 return ["BUILD_PASTURE"]
 
-            # Casos 2 e 3: PLANT prioritario
-            if hour <= 20:
+            # Scarcity Rancher crop priority: STRAWBERRY (never floors) > MELON (bootstrap only) > WHEAT (feed only)
+            if total_crops < 50:
                 if seeds.get("STRAWBERRY", 0) > 0 and days_left >= STRAWBERRY_MIN_DAYS_LEFT:
                     return ["PLANT", "STRAWBERRY"]
-                if seeds.get("MELON", 0) > 0 and day <= 12:
+                if seeds.get("MELON", 0) > 0 and day <= 10:
                     return ["PLANT", "MELON"]
-                # WHEAT: suporte early — nao e cultura comercial primaria
                 if seeds.get("WHEAT", 0) > 0 and day <= 8:
                     return ["PLANT", "WHEAT"]
 
@@ -600,10 +614,11 @@ class KaggricultureAgentV17:
             info    = CROPS.get(crop, {})
             age     = day - tile.get("planted_day", day)
             watered = tile.get("watered_today") or (pos and (x, y) in self.watered_this_day)
-            if age >= info.get("max", 2) or tile.get("yield_units", 0) > 0:
-                return ["HARVEST"]
+            # A.7 v3: Scarcity Rancher — WATER first, no FERTILIZE on crops (sell it instead)
             if not watered:
                 return ["WATER"]
+            if age >= info.get("max", 2) or tile.get("yield_units", 0) > 0:
+                return ["HARVEST"]
             return ["PASS"]
 
         if isinstance(tile, dict) and tile.get("kind") == "PASTURE":
@@ -633,29 +648,31 @@ class KaggricultureAgentV17:
         inv = inv or {}
         animal_in_shed = shed.get("COW", 0) + shed.get("SHEEP", 0)
         return [
-            # 1. FEED
+            # 1. WATER — A.5+A.6: top priority (every plant every day)
+            lambda t, x, y: (isinstance(t, dict) and t.get("kind") == "PLANT"
+                             and not t.get("watered_today")
+                             and (x, y) not in self.watered_this_day),
+            # 2. FEED
             lambda t, x, y: (isinstance(t, dict) and t.get("kind") == "PASTURE"
                              and t.get("animal") and not t.get("fed_today")
                              and (x, y) not in self.fed_this_day
-                             and (shed.get("WHEAT", 0) > 0 or inv.get("WHEAT", 0) > 0)),
-            # 2. HARVEST
+                              and (shed.get("WHEAT", 0) > 0 or inv.get("WHEAT", 0) > 0)),
+            # 3. HARVEST
             lambda t, x, y: (isinstance(t, dict)
                              and ((t.get("kind") == "PASTURE" and t.get("yield_units", 0) > 0)
                                   or (t.get("kind") == "PLANT" and (
                                       t.get("yield_units", 0) > 0
                                       or (day - t.get("planted_day", day))
                                          >= CROPS.get(str(t.get("crop") or ""), {}).get("max", 99))))),
-            # 3. CARE
+            # 4. Empty tile (PLANT) — A.6: above CARE/FERT
+            lambda t, x, y: t is None,
+            # 5. CARE
             lambda t, x, y: (isinstance(t, dict) and t.get("kind") == "PASTURE"
                              and t.get("animal") and not t.get("cared_today")
                              and (x, y) not in self.cared_this_day),
-            # 4. FERT
+            # 5. FERT
             lambda t, x, y: (isinstance(t, dict) and t.get("kind") == "PASTURE"
                              and t.get("fertilizer_available")),
-            # 5. WATER
-            lambda t, x, y: (isinstance(t, dict) and t.get("kind") == "PLANT"
-                             and not t.get("watered_today")
-                             and (x, y) not in self.watered_this_day),
             # 6. PLACE animal (tem animal no inventario)
             lambda t, x, y: (isinstance(t, dict) and t.get("kind") == "PASTURE"
                              and t.get("animal") is None and inv
@@ -669,9 +686,7 @@ class KaggricultureAgentV17:
                 and empty_past == 0
                 and day <= 15
             ),
-            # 8. Tile vazio generico (para PLANT via _decide)
-            lambda t, x, y: t is None,
-            # 9. WEED
+            # 8. WEED
             lambda t, x, y: isinstance(t, dict) and t.get("kind") == "WEED",
         ]
 
@@ -724,6 +739,23 @@ class KaggricultureAgentV17:
                 return result
 
         farm        = farms[player] or {}
+        # A.8: read opponent's animals for adaptive herd rotation
+        opp_farm = farms[1 - player] if 1 - player < len(farms) and isinstance(farms[1 - player], dict) else {}
+        opp_cows = opp_sheep = 0
+        for row in opp_farm.get("tiles", []):
+            for t in (row if isinstance(row, list) else []):
+                if isinstance(t, dict) and t.get("kind") == "PASTURE":
+                    a = t.get("animal")
+                    if a == "COW": opp_cows += 1
+                    elif a == "SHEEP": opp_sheep += 1
+        # Adaptive herd targets: counter-position against opponent
+        # If opponent is cow-heavy, we go sheep-heavy (town drain is shared)
+        adj_cow = TARGET_COW; adj_sheep = TARGET_SHEEP
+        if opp_cows > opp_sheep + 2:
+            adj_sheep = min(TARGET_SHEEP + 4, 12)
+        elif opp_sheep > opp_cows + 2:
+            adj_cow = min(TARGET_COW + 4, 12)
+        self.adj_cow = adj_cow; self.adj_sheep = adj_sheep
         private     = obs.get("private", {}) or {}
         shed        = private.get("shed",   {}) or {}
         seeds       = private.get("seeds",  {}) or {}
@@ -737,9 +769,15 @@ class KaggricultureAgentV17:
             self.cared_this_day   = set()
 
         cows, sheep, pastures, empty_past = self._count_animals(farm)
+        # A.6: count crops for plant cap
+        total_crops = 0
+        for row in farm.get("tiles", []):
+            for t in (row if isinstance(row, list) else []):
+                if isinstance(t, dict) and t.get("kind") == "PLANT":
+                    total_crops += 1
         tasks  = self._scan(farm, day)
         market = self._market(obs, tasks, cows, sheep, pastures, empty_past)
-        assigned = set()
+        assigned = {pos for pos in self.worker_targets.values()}
 
         def worker_act(worker_id, wpos, winv):
             x, y    = wpos
@@ -789,7 +827,7 @@ class KaggricultureAgentV17:
                     if tx > x: return ["EAST"]
 
             action = self._decide(tile, shed, seeds, day, winv, wpos, hour,
-                                  cows, sheep, empty_past)
+                                  cows, sheep, empty_past, total_crops)
             valid_action = safe_return(action)
             if valid_action and valid_action[0] != "PASS":
                 if   valid_action[0] == "WATER": self.watered_this_day.add((x, y))
@@ -809,9 +847,59 @@ class KaggricultureAgentV17:
                 if inv_sum > 3:
                     return ["DROP"]
 
+            def is_target_valid(tx, ty):
+                target_tile = self._tile_at(farm, (tx, ty))
+                if target_tile == "LOCKED": return False
+                for cond in self._move_priorities(shed, day, winv, empty_past=empty_past):
+                    if cond(target_tile, tx, ty):
+                        return True
+                return False
+
+            if worker_id in self.worker_targets:
+                tx, ty = self.worker_targets[worker_id]
+                if not is_target_valid(tx, ty):
+                    del self.worker_targets[worker_id]
+                    self.worker_failures.pop(worker_id, None)
+                    if (tx, ty) in assigned:
+                        assigned.remove((tx, ty))
+                    self.telemetry["target_releases"] += 1
+                    self.telemetry["target_changes"] += 1
+                    last_intent_data = self.worker_history.get(worker_id)
+                    last_intent = last_intent_data[0] if last_intent_data else None
+                    if last_intent and last_intent[0] in ["HARVEST", "PLANT", "WATER", "FEED", "CARE", "PLACE", "COLLECT_FERTILIZER", "BUILD_PASTURE"]:
+                        self.telemetry["claims_released_after_productive_action"] += 1
+                    elif (x, y) == (tx, ty):
+                        self.telemetry["claims_released_on_arrival"] += 1
+                    else:
+                        self.telemetry["claims_released_due_to_invalid_target"] += 1
+                else:
+                    if (tx, ty) in assigned:
+                        assigned.remove((tx, ty))
+                    _, _, direction = self._bfs((x, y), lambda t, cx, cy: (cx, cy) == (tx, ty), farm, assigned)
+                    assigned.add((tx, ty))
+                    
+                    if direction:
+                        self.worker_failures[worker_id] = 0
+                        self.telemetry["target_persistence_turns"] += 1
+                        return [direction]
+                    else:
+                        fails = self.worker_failures.get(worker_id, 0) + 1
+                        self.worker_failures[worker_id] = fails
+                        if fails > 3:
+                            del self.worker_targets[worker_id]
+                            del self.worker_failures[worker_id]
+                            assigned.remove((tx, ty))
+                            self.telemetry["target_releases"] += 1
+                            self.telemetry["target_changes"] += 1
+                            self.telemetry["claims_released_due_to_unreachable_target"] += 1
+                        else:
+                            return ["PASS"]
+
             for cond in self._move_priorities(shed, day, winv, empty_past=empty_past):
                 tx, ty, direction = self._bfs((x, y), cond, farm, assigned)
                 if direction:
+                    self.worker_targets[worker_id] = (tx, ty)
+                    self.telemetry["target_claims"] += 1
                     assigned.add((tx, ty))
                     return [direction]
 

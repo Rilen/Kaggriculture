@@ -16,3 +16,6 @@ kaggle.json
 .env
 .venv/
 venv/
+replays/ep_*.json
+replays/sample_episode.json
+replays/a4_vs_v3_seed42_replay.json

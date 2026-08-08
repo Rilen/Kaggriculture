@@ -1,0 +1,87 @@
+{
+  "n_episodes": 5,
+  "winners": [
+    {
+      "episode_id": 90044961,
+      "team": "Lucien de Rubempre",
+      "agent_idx": 1,
+      "score": 152469.0,
+      "action_stats": "{'FEED': {'count': 319, 'chose_best_pct': 28.526645768025077, 'avg_rank': 4.413793103448276, 'avg_ds5': 5188.658307210031, 'avg_ds20': 20740.677115987462, 'avg_value_ratio': 0.9115987460815047, 'avg_candidates': 7.150470219435737}, 'CARE': {'count': 308, 'chose_best_pct': 23.7012987012987, 'avg_rank': 4.4480519480519485, 'avg_ds5': 5242.006493506494, 'avg_ds20': 20068.43831168831, 'avg_value_ratio': 0.9071428571428571, 'avg_candidates': 7.009740259740259}, 'WATER': {'count': 845, 'chose_best_pct': 6.7455621301775155, 'avg_rank': 13.89179548156956, 'avg_ds5': 4678.38224852071, 'avg_ds20': 20170.660355029584, 'avg_value_ratio': 0.5393412228796844, 'avg_candidates': 25.758579881656804}, 'HARVEST': {'count': 337, 'chose_best_pct': 8.902077151335313, 'avg_rank': 8.598802395209582, 'avg_ds5': 7676.109792284867, 'avg_ds20': 29149.0, 'avg_value_ratio': 0.40425123639960436, 'avg_candidates': 22.64688427299703}, 'PLANT': {'count': 1, 'chose_best_pct': 0.0, 'avg_rank': 0, 'avg_ds5': 20904.0, 'avg_ds20': 28477.0, 'avg_value_ratio': 0.0, 'avg_candidates': 23}}",
+      "total_instances": 1810
+    },
+    {
+      "episode_id": 90563876,
+      "team": "THUNDER THUNDER",
+      "agent_idx": 0,
+      "score": 131038.0,
+      "action_stats": "{'FEED': {'count': 301, 'chose_best_pct': 13.2890365448505, 'avg_rank': 5.1096345514950166, 'avg_ds5': 597.8006644518273, 'avg_ds20': 5973.013289036545, 'avg_value_ratio': 0.8843853820598007, 'avg_candidates': 7.033222591362127}, 'CARE': {'count': 307, 'chose_best_pct': 14.983713355048861, 'avg_rank': 5.01628664495114, 'avg_ds5': 690.5048859934853, 'avg_ds20': 6094.120521172638, 'avg_value_ratio': 0.8879478827361563, 'avg_candidates': 6.95114006514658}, 'WATER': {'count': 921, 'chose_best_pct': 7.926167209554831, 'avg_rank': 17.823018458197613, 'avg_ds5': 1273.3257328990228, 'avg_ds20': 5692.121606948968, 'avg_value_ratio': 0.5597918928700688, 'avg_candidates': 34.08251900108578}, 'HARVEST': {'count': 347, 'chose_best_pct': 10.951008645533141, 'avg_rank': 10.77521613832853, 'avg_ds5': 1566.0576368876082, 'avg_ds20': 8608.608069164266, 'avg_value_ratio': 0.4508532660902978, 'avg_candidates': 38.60518731988473}}",
+      "total_instances": 1876
+    },
+    {
+      "episode_id": 90564660,
+      "team": "Seb (allegedly)",
+      "agent_idx": 1,
+      "score": 100507.0,
+      "action_stats": "{'WATER': {'count': 673, 'chose_best_pct': 7.13224368499257, 'avg_rank': 16.046062407132244, 'avg_ds5': 697.9197622585439, 'avg_ds20': 4912.3491827637445, 'avg_value_ratio': 0.6144997523526499, 'avg_candidates': 31.13075780089153}, 'FEED': {'count': 355, 'chose_best_pct': 24.788732394366196, 'avg_rank': 4.259154929577464, 'avg_ds5': 819.1830985915493, 'avg_ds20': 4866.284507042254, 'avg_value_ratio': 0.9087323943661972, 'avg_candidates': 8.532394366197183}, 'CARE': {'count': 327, 'chose_best_pct': 21.712538226299692, 'avg_rank': 4.321100917431193, 'avg_ds5': 1425.0183486238532, 'avg_ds20': 4586.724770642202, 'avg_value_ratio': 0.9107033639143731, 'avg_candidates': 8.966360856269112}, 'HARVEST': {'count': 342, 'chose_best_pct': 10.526315789473683, 'avg_rank': 11.874269005847953, 'avg_ds5': 1821.8040935672514, 'avg_ds20': 7934.862573099415, 'avg_value_ratio': 0.4221744639376218, 'avg_candidates': 21.89766081871345}}",
+      "total_instances": 1697
+    },
+    {
+      "episode_id": 90045719,
+      "team": "CARLOS CAADA ROSTRO",
+      "agent_idx": 1,
+      "score": 82688.0,
+      "action_stats": "{'FEED': {'count': 319, 'chose_best_pct': 28.526645768025077, 'avg_rank': 4.413793103448276, 'avg_ds5': 2137.426332288401, 'avg_ds20': 8458.799373040752, 'avg_value_ratio': 0.9115987460815047, 'avg_candidates': 7.150470219435737}, 'CARE': {'count': 308, 'chose_best_pct': 23.7012987012987, 'avg_rank': 4.4480519480519485, 'avg_ds5': 2135.6915584415583, 'avg_ds20': 8383.181818181818, 'avg_value_ratio': 0.9071428571428571, 'avg_candidates': 7.009740259740259}, 'WATER': {'count': 846, 'chose_best_pct': 6.73758865248227, 'avg_rank': 13.71326164874552, 'avg_ds5': 1982.1997635933806, 'avg_ds20': 8401.802600472813, 'avg_value_ratio': 0.5353427895981088, 'avg_candidates': 25.34988179669031}, 'HARVEST': {'count': 337, 'chose_best_pct': 8.902077151335313, 'avg_rank': 8.568862275449101, 'avg_ds5': 3120.4985163204747, 'avg_ds20': 11695.293768545995, 'avg_value_ratio': 0.4024915924826904, 'avg_candidates': 22.5459940652819}}",
+      "total_instances": 1810
+    },
+    {
+      "episode_id": 90561400,
+      "team": "Chloe",
+      "agent_idx": 1,
+      "score": 150620.0,
+      "action_stats": "{'WATER': {'count': 922, 'chose_best_pct': 7.266811279826464, 'avg_rank': 18.317787418655097, 'avg_ds5': 1213.3297180043385, 'avg_ds20': 7142.289587852494, 'avg_value_ratio': 0.5438195950831526, 'avg_candidates': 32.6529284164859}, 'FEED': {'count': 314, 'chose_best_pct': 17.8343949044586, 'avg_rank': 4.43312101910828, 'avg_ds5': 482.12420382165607, 'avg_ds20': 6977.398089171975, 'avg_value_ratio': 0.9057324840764331, 'avg_candidates': 7.289808917197452}, 'CARE': {'count': 322, 'chose_best_pct': 17.70186335403727, 'avg_rank': 4.422360248447205, 'avg_ds5': 586.9006211180124, 'avg_ds20': 7260.071428571428, 'avg_value_ratio': 0.9031055900621118, 'avg_candidates': 7.186335403726708}, 'HARVEST': {'count': 374, 'chose_best_pct': 10.16042780748663, 'avg_rank': 12.43048128342246, 'avg_ds5': 2657.053475935829, 'avg_ds20': 9459.05614973262, 'avg_value_ratio': 0.4039846999405823, 'avg_candidates': 35.644385026737964}}",
+      "total_instances": 1932
+    }
+  ],
+  "losers": [
+    {
+      "episode_id": 90044961,
+      "team": "Savko",
+      "agent_idx": 0,
+      "score": 151880.0,
+      "action_stats": "{'FEED': {'count': 319, 'chose_best_pct': 28.526645768025077, 'avg_rank': 4.413793103448276, 'avg_ds5': 4637.974921630094, 'avg_ds20': 17283.065830721003, 'avg_value_ratio': 0.9115987460815047, 'avg_candidates': 7.150470219435737}, 'CARE': {'count': 308, 'chose_best_pct': 23.7012987012987, 'avg_rank': 4.4480519480519485, 'avg_ds5': 4928.88961038961, 'avg_ds20': 16901.89285714286, 'avg_value_ratio': 0.9071428571428571, 'avg_candidates': 7.009740259740259}, 'WATER': {'count': 846, 'chose_best_pct': 6.73758865248227, 'avg_rank': 13.929078014184396, 'avg_ds5': 3781.028368794326, 'avg_ds20': 17219.983451536642, 'avg_value_ratio': 0.541063829787234, 'avg_candidates': 25.75886524822695}, 'HARVEST': {'count': 337, 'chose_best_pct': 8.902077151335313, 'avg_rank': 8.646884272997033, 'avg_ds5': 6457.33234421365, 'avg_ds20': 24317.703264094955, 'avg_value_ratio': 0.40658061325420375, 'avg_candidates': 22.922848664688427}}",
+      "total_instances": 1810
+    },
+    {
+      "episode_id": 90563876,
+      "team": "Raj Aryan",
+      "agent_idx": 1,
+      "score": 130534.0,
+      "action_stats": "{'WATER': {'count': 922, 'chose_best_pct': 7.266811279826464, 'avg_rank': 18.317787418655097, 'avg_ds5': 907.8329718004338, 'avg_ds20': 6329.20715835141, 'avg_value_ratio': 0.5438195950831526, 'avg_candidates': 32.6529284164859}, 'FEED': {'count': 314, 'chose_best_pct': 17.8343949044586, 'avg_rank': 4.43312101910828, 'avg_ds5': 414.1369426751592, 'avg_ds20': 6176.5605095541405, 'avg_value_ratio': 0.9057324840764331, 'avg_candidates': 7.289808917197452}, 'CARE': {'count': 322, 'chose_best_pct': 17.70186335403727, 'avg_rank': 4.422360248447205, 'avg_ds5': 471.6521739130435, 'avg_ds20': 6529.195652173913, 'avg_value_ratio': 0.9031055900621118, 'avg_candidates': 7.186335403726708}, 'HARVEST': {'count': 374, 'chose_best_pct': 10.16042780748663, 'avg_rank': 12.43048128342246, 'avg_ds5': 2325.620320855615, 'avg_ds20': 9252.245989304813, 'avg_value_ratio': 0.4039846999405823, 'avg_candidates': 35.644385026737964}}",
+      "total_instances": 1932
+    },
+    {
+      "episode_id": 90564660,
+      "team": "Raj Aryan",
+      "agent_idx": 0,
+      "score": 91564.0,
+      "action_stats": "{'WATER': {'count': 913, 'chose_best_pct': 7.228915662650602, 'avg_rank': 18.117196056955095, 'avg_ds5': 863.1872946330777, 'avg_ds20': 5145.991237677985, 'avg_value_ratio': 0.5438791529755385, 'avg_candidates': 32.21467688937568}, 'FEED': {'count': 314, 'chose_best_pct': 17.8343949044586, 'avg_rank': 4.43312101910828, 'avg_ds5': 423.6050955414013, 'avg_ds20': 5015.949044585987, 'avg_value_ratio': 0.9057324840764331, 'avg_candidates': 7.289808917197452}, 'CARE': {'count': 322, 'chose_best_pct': 17.70186335403727, 'avg_rank': 4.422360248447205, 'avg_ds5': 484.4751552795031, 'avg_ds20': 5245.444099378882, 'avg_value_ratio': 0.9031055900621118, 'avg_candidates': 7.186335403726708}, 'HARVEST': {'count': 370, 'chose_best_pct': 10.27027027027027, 'avg_rank': 12.248648648648649, 'avg_ds5': 1643.662162162162, 'avg_ds20': 6217.243243243243, 'avg_value_ratio': 0.40589264264264263, 'avg_candidates': 35.42702702702703}}",
+      "total_instances": 1919
+    },
+    {
+      "episode_id": 90045719,
+      "team": "haoran huang430",
+      "agent_idx": 0,
+      "score": 76929.0,
+      "action_stats": "{'FEED': {'count': 319, 'chose_best_pct': 28.526645768025077, 'avg_rank': 4.413793103448276, 'avg_ds5': 2124.655172413793, 'avg_ds20': 8083.147335423198, 'avg_value_ratio': 0.9115987460815047, 'avg_candidates': 7.150470219435737}, 'CARE': {'count': 308, 'chose_best_pct': 23.7012987012987, 'avg_rank': 4.4480519480519485, 'avg_ds5': 2040.6266233766235, 'avg_ds20': 8057.675324675325, 'avg_value_ratio': 0.9071428571428571, 'avg_candidates': 7.009740259740259}, 'WATER': {'count': 846, 'chose_best_pct': 6.73758865248227, 'avg_rank': 13.603841536614645, 'avg_ds5': 1904.3829787234042, 'avg_ds20': 7941.22695035461, 'avg_value_ratio': 0.5341646966115051, 'avg_candidates': 25.30496453900709}, 'HARVEST': {'count': 337, 'chose_best_pct': 8.902077151335313, 'avg_rank': 8.615615615615615, 'avg_ds5': 3056.252225519288, 'avg_ds20': 11154.66765578635, 'avg_value_ratio': 0.4017959940652819, 'avg_candidates': 22.477744807121663}, 'PLANT': {'count': 2, 'chose_best_pct': 0.0, 'avg_rank': 0, 'avg_ds5': 2705.5, 'avg_ds20': 4126.5, 'avg_value_ratio': 0.0, 'avg_candidates': 24}}",
+      "total_instances": 1812
+    },
+    {
+      "episode_id": 90561400,
+      "team": "Kaito Fukami",
+      "agent_idx": 0,
+      "score": 150620.0,
+      "action_stats": "{'WATER': {'count': 922, 'chose_best_pct': 7.266811279826464, 'avg_rank': 18.317787418655097, 'avg_ds5': 1213.3297180043385, 'avg_ds20': 7142.289587852494, 'avg_value_ratio': 0.5438195950831526, 'avg_candidates': 32.6529284164859}, 'FEED': {'count': 314, 'chose_best_pct': 17.8343949044586, 'avg_rank': 4.43312101910828, 'avg_ds5': 482.12420382165607, 'avg_ds20': 6977.398089171975, 'avg_value_ratio': 0.9057324840764331, 'avg_candidates': 7.289808917197452}, 'CARE': {'count': 322, 'chose_best_pct': 17.70186335403727, 'avg_rank': 4.422360248447205, 'avg_ds5': 586.9006211180124, 'avg_ds20': 7260.071428571428, 'avg_value_ratio': 0.9031055900621118, 'avg_candidates': 7.186335403726708}, 'HARVEST': {'count': 374, 'chose_best_pct': 10.16042780748663, 'avg_rank': 12.43048128342246, 'avg_ds5': 2657.053475935829, 'avg_ds20': 9459.05614973262, 'avg_value_ratio': 0.4039846999405823, 'avg_candidates': 35.644385026737964}}",
+      "total_instances": 1932
+    }
+  ]
+}
