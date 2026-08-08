@@ -272,6 +272,7 @@ class KaggricultureAgentV17:
         self.worker_history   = {}
         self.worker_targets   = {}
         self.worker_failures  = {}
+        self.worker_resupply_turns = {}
         self.telemetry = {
             "invalid_action_intercepted": 0,
             "feed_precondition_fail": 0,
@@ -290,6 +291,12 @@ class KaggricultureAgentV17:
             "claims_released_after_productive_action": 0,
             "claims_released_due_to_invalid_target": 0,
             "claims_released_due_to_unreachable_target": 0,
+            "RESUPPLY_CLAIMS": 0,
+            "RESUPPLY_COMPLETED": 0,
+            "RESUPPLY_ABORTED": 0,
+            "RESUPPLY_DUPLICATED": 0,
+            "RESUPPLY_LOOP_TURNS": 0,
+            "MAX_CONSECUTIVE_RESUPPLY_TURNS": 0,
         }
 
     @staticmethod
@@ -821,12 +828,26 @@ class KaggricultureAgentV17:
         tasks  = self._scan(farm, day)
         market = self._market(obs, tasks, cows, sheep, pastures, empty_past)
         assigned = {pos for pos in self.worker_targets.values()}
+        
+        # Track duplicated resupplies
+        resupply_targets = [tgt[2] for tgt in self.worker_targets.values() if tgt[2].startswith("RESUPPLY_")]
+        if len(resupply_targets) > len(set(resupply_targets)):
+            self.telemetry["RESUPPLY_DUPLICATED"] += 1
 
         def worker_act(worker_id, wpos, winv):
             x, y    = wpos
             tile    = self._tile_at(farm, (x, y))
             winv    = winv or {}
             inv_sum = sum(winv.values())
+            
+            if worker_id in self.worker_targets and self.worker_targets[worker_id][2].startswith("RESUPPLY_"):
+                self.telemetry["RESUPPLY_LOOP_TURNS"] += 1
+                self.worker_resupply_turns[worker_id] = self.worker_resupply_turns.get(worker_id, 0) + 1
+                if self.worker_resupply_turns[worker_id] > self.telemetry["MAX_CONSECUTIVE_RESUPPLY_TURNS"]:
+                    self.telemetry["MAX_CONSECUTIVE_RESUPPLY_TURNS"] = self.worker_resupply_turns[worker_id]
+            else:
+                self.worker_resupply_turns[worker_id] = 0
+
 
             # State Integrity Layer: Assinatura de estado + Circuit Breaker
             state_sig = f"{tile.get('kind', 'None')}-{tile.get('yield_units', 0)}-{tile.get('fed_today', False)}" if isinstance(tile, dict) else "None"
@@ -917,10 +938,43 @@ class KaggricultureAgentV17:
                     last_intent = last_intent_data[0] if last_intent_data else None
                     if last_intent and last_intent[0] in ["HARVEST", "PLANT", "WATER", "FEED", "CARE", "PLACE", "COLLECT_FERTILIZER", "BUILD_PASTURE", "PICKUP"]:
                         self.telemetry["claims_released_after_productive_action"] += 1
+                        if task_name.startswith("RESUPPLY_") and last_intent[0] == "PICKUP":
+                            self.telemetry["RESUPPLY_COMPLETED"] += 1
                     elif (x, y) == (tx, ty):
                         self.telemetry["claims_released_on_arrival"] += 1
+                        if task_name.startswith("RESUPPLY_"):
+                            self.telemetry["RESUPPLY_ABORTED"] += 1
                     else:
                         self.telemetry["claims_released_due_to_invalid_target"] += 1
+                        if task_name.startswith("RESUPPLY_"):
+                            self.telemetry["RESUPPLY_ABORTED"] += 1
+                elif validity == "RESUPPLY_REQUIRED":
+                    # CHANGE target to shed!
+                    if not task_name.startswith("RESUPPLY_") and (tx, ty) in assigned:
+                        assigned.remove((tx, ty))
+                    item = "WHEAT" if task_name == "FEED" else ("COW" if shed.get("COW",0) > 0 else "SHEEP")
+                    shed_pos = (len(farm["tiles"][0])//2, len(farm["tiles"])//2)
+                    task_name = "RESUPPLY_" + item
+                    self.worker_targets[worker_id] = (shed_pos[0], shed_pos[1], task_name)
+                    self.telemetry["RESUPPLY_CLAIMS"] += 1
+                    tx, ty = shed_pos
+                    # Proceed to BFS using the new tx, ty and task_name
+                    _, _, direction = self._bfs((x, y), lambda t, cx, cy: (cx, cy) == (tx, ty), farm, assigned)
+                    if direction:
+                        self.worker_failures[worker_id] = 0
+                        self.telemetry["target_persistence_turns"] += 1
+                        return [direction]
+                    else:
+                        if (x, y) == (tx, ty):
+                            self.worker_failures[worker_id] = 0
+                            self.telemetry["target_persistence_turns"] += 1
+                            return ["PASS"]
+                        else:
+                            self.worker_failures[worker_id] = self.worker_failures.get(worker_id, 0) + 1
+                            if self.worker_failures[worker_id] > 3:
+                                del self.worker_targets[worker_id]
+                                del self.worker_failures[worker_id]
+                            return ["PASS"]
                 else:
                     if not task_name.startswith("RESUPPLY_") and (tx, ty) in assigned:
                         assigned.remove((tx, ty))
@@ -972,6 +1026,7 @@ class KaggricultureAgentV17:
                             task_name = "RESUPPLY_" + item
                             self.worker_targets[worker_id] = (shed_pos[0], shed_pos[1], task_name)
                             self.telemetry["target_claims"] += 1
+                            self.telemetry["RESUPPLY_CLAIMS"] += 1
                             # RESUPPLY targets shed, no assigned block needed for shed
                             return [shed_dir]
                         continue # Cannot reach shed
