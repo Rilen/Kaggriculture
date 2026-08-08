@@ -28,6 +28,23 @@ def get_productive(steps):
                         prod += 1
     return prod
 
+def get_completed_cycles(steps):
+    cycles = 0
+    for step in steps:
+        p_action = step[0].get("action", {})
+        if isinstance(p_action, dict):
+            # Harvests
+            farmer = p_action.get("farmer", ["PASS"])[0]
+            if farmer == "HARVEST": cycles += 1
+            for h in p_action.get("hands", []):
+                if isinstance(h, list) and len(h) > 0 and h[0] == "HARVEST":
+                    cycles += 1
+            # Sales
+            for m_act in p_action.get("market", []):
+                if m_act and m_act[0] == "SELL":
+                    cycles += 1
+    return cycles
+
 def run_match(agent_file, seed):
     env = make('kaggriculture', configuration={'episodeSteps': 3000, 'randomSeed': seed})
     steps = env.run([agent_file, 'submission.py'])
@@ -35,11 +52,15 @@ def run_match(agent_file, seed):
     score = steps[-1][0].get('reward', 0)
     rev = get_revenue(steps)
     prod = get_productive(steps)
+    cycles = get_completed_cycles(steps)
     
-    # Try to extract telemetry if it's A.2
+    tce = cycles / prod if prod > 0 else 0
+    rpa = rev / prod if prod > 0 else 0
+    
+    # Try to extract telemetry if it's A.3
     # In python, we can't easily get the agent instance from env.run if we pass strings.
     # But since we just want score, rev, prod, it's fine. We can print it out.
-    print(json.dumps({"score": score, "rev": rev, "prod": prod}))
+    print(json.dumps({"score": score, "rev": rev, "prod": prod, "tce": tce, "rpa": rpa}))
 
 if __name__ == "__main__":
     agent = sys.argv[1]
