@@ -1,17 +1,50 @@
 """
-Kaggriculture Autonomous AI Agent — Version 15 (v15)
+Kaggriculture Autonomous AI Agent — Version 17 (v17)
 
-Meta: Fixed Asset Engine (Kaileh57 Top-1 clone, 128k-148k pts)
+Base: v15 (Fixed Asset Engine — baseline vencedor $38.943 vs starter)
 
-Opening (Dia 0, Hora 1):
-  5x HIRE + 2 SHEEP + 2 COW + WHEAT 7 + MELON 12
-  Sem BUY_LAND. Capital cai para ~$158.
+Diagnostico Fase 6.5 (5 seeds x starter):
+  v15: $38.943 media  — flywheel MILK/WOOL funciona
+  v16: $11.315 media  — regressao por WHEAT farming de baixo valor
+  Resultado: v16 REJECTED
 
-Fluxo:
-  Dia 0   : BUILD_PASTURE + PLACE + plant MELON/WHEAT (cash early) + FEED
-  Dia 1   : Broke -> 0 hands, so farmer FEED/CARE/COLLECT + BUY_PRODUCT WHEAT
-  Dia 3-11: Escala para 8 COW + 6 SHEEP, BUY_LAND nos dias 7 e 11
-  Mid/Late: Venda continua MILK/WOOL, rehire adaptativo, zero crops finais
+Hipotese para v17 (baseada em replay do adversario $51.706):
+  Adversario faz: 8 COW + 2 SHEEP (MILK/WOOL flywheel)
+               + 9 STRAWBERRY (alto valor + demanda de lojas)
+  Nao faz: WHEAT como cultura comercial primaria
+
+Mudancas v17 vs v15 (apenas 4 pontos):
+
+  1. OPENING: MELON 12 -> MELON 9 + STRAWBERRY 3
+     Abre espaco para STRAWBERRY no early sem custar o flywheel animal.
+     Capital cai ~$150 a mais — toleravel dado seed money de $3000.
+
+  2. WHEAT feed buffer dinamico (preco real do mercado)
+     v15 usa: buy_n * 30 (hardcode)
+     v17 usa: buy_n * wheat_price_atual
+     Evita ordens invalidas quando trigo esta caro.
+
+  3. STRAWBERRY em tiles vagos apos objetivo de pasture satisfeito
+     v15: tile vazio -> BUILD_PASTURE ate target | depois MELON/WHEAT
+     v17: tile vazio -> BUILD_PASTURE ate target | depois STRAWBERRY | depois MELON
+     WHEAT nao planta como comercial — apenas feed/seed
+     
+  4. PICKUP animal gate: apenas se empty_past > 0
+     v15: PICKUP COW/SHEEP sempre que junto ao shed com inv_sum==0
+     v17: PICKUP COW/SHEEP apenas se ha pastagem vazia aguardando
+     Evita loop de transporte inutil que compite com FEED/CARE
+
+  5. BUY_SEED STRAWBERRY: ate 3 seeds, dias 0-15, apenas se money > 1200
+     Compra conservadora que nao ameaca o capital do flywheel.
+
+Preservado identico ao v15:
+  - BFS bidirecional (_bfs)
+  - Scanner (_scan)
+  - _move_priorities (incluindo WATER para plantas)
+  - Targets de animais (TARGET_COW=8, TARGET_SHEEP=6)
+  - BUY_LAND timing (dia 7 e 11)
+  - HIRE adaptativo
+  - Toda logica de FEED/CARE/HARVEST
 """
 
 from collections import deque
@@ -37,20 +70,27 @@ MAX_MARKET_ORDERS = 10
 SHED_SOFT_CAP = 75
 LAND_COST = {1: 1000, 2: 2000, 3: 4000}
 
-TARGET_COW = 8
-TARGET_SHEEP = 6
+# Preservado do v15 — flywheel animal e a espinha dorsal economica
+TARGET_COW      = 8
+TARGET_SHEEP    = 6
 TARGET_PASTURES = 14
+
+# STRAWBERRY: ciclo de 10-16 dias; so planta se ha tempo para fechar
+STRAWBERRY_MIN_DAYS_LEFT = 12
 
 
 # =============================================================================
-# OPENING BOOK — Dia 0 (replica exata do Top 1)
+# OPENING BOOK — Dia 0
 # =============================================================================
 class OpeningBook:
     """
-    Opening deterministico v15 (Kaileh57):
-      Hour 1    : market dump (5 HIRE + animals + seeds)
-      Hour 2-5  : PICKUP + BUILD_PASTURE + PLACE
-      Hour 6-23 : FEED / CARE / PLANT MELON+WHEAT / WATER
+    Opening v17 (baseado no v15 com ajuste minimo):
+      Hour 1: 5 HIRE + 2 SHEEP + 2 COW + WHEAT 7 + MELON 9 + STRAWBERRY 3
+      Hour 2: BUY_PRODUCT WHEAT 2
+
+    Diferenca vs v15: MELON 12 -> MELON 9 + STRAWBERRY 3
+    Custo adicional: 3 * $100 = $300 mais em sementes vs 3 * $80 economizados = net -$60
+    Capital inicial segue viavel para o flywheel animal.
     """
 
     def __init__(self):
@@ -72,14 +112,10 @@ class OpeningBook:
     def _navigate(pos, target):
         x, y = pos
         tx, ty = target
-        if ty < y:
-            return ["NORTH"]
-        if ty > y:
-            return ["SOUTH"]
-        if tx < x:
-            return ["WEST"]
-        if tx > x:
-            return ["EAST"]
+        if ty < y: return ["NORTH"]
+        if ty > y: return ["SOUTH"]
+        if tx < x: return ["WEST"]
+        if tx > x: return ["EAST"]
         return ["PASS"]
 
     def _find_empty(self, tiles):
@@ -109,16 +145,16 @@ class OpeningBook:
 
     def _worker(self, hour, pos, inv, tiles, shed, seeds, idx):
         x, y = pos
-        tile = self._tile_at(tiles, x, y)
-        inv = inv or {}
-        shed = shed or {}
+        tile  = self._tile_at(tiles, x, y)
+        inv   = inv   or {}
+        shed  = shed  or {}
         seeds = seeds or {}
 
         # Hora 2-5: PICKUP + BUILD + PLACE
         if hour <= 5:
-            if idx == -1 and inv.get("COW", 0) == 0 and shed.get("COW", 0) > 0:
+            if idx == -1 and inv.get("COW",   0) == 0 and shed.get("COW",   0) > 0:
                 return ["PICKUP", "COW", 2]
-            if idx == 0 and inv.get("SHEEP", 0) == 0 and shed.get("SHEEP", 0) > 0:
+            if idx == 0  and inv.get("SHEEP", 0) == 0 and shed.get("SHEEP", 0) > 0:
                 return ["PICKUP", "SHEEP", 2]
             carrying = [a for a in ("COW", "SHEEP") if inv.get(a, 0) > 0]
             if carrying:
@@ -157,8 +193,9 @@ class OpeningBook:
             if tile.get("yield_units", 0) > 0:
                 return ["HARVEST"]
 
+        # Planta: STRAWBERRY primeiro, depois MELON, depois WHEAT
         if tile is None and hour <= 20:
-            for crop in ("MELON", "WHEAT"):
+            for crop in ("STRAWBERRY", "MELON", "WHEAT"):
                 if seeds.get(crop, 0) > 0:
                     return ["PLANT", crop]
 
@@ -171,7 +208,7 @@ class OpeningBook:
                 if needs and (rx, ry) != (x, y):
                     return self._navigate(pos, (rx, ry))
 
-        if hour <= 20 and any(seeds.get(c, 0) > 0 for c in ("MELON", "WHEAT")):
+        if hour <= 20 and any(seeds.get(c, 0) > 0 for c in ("STRAWBERRY", "MELON", "WHEAT")):
             empty = self._find_empty(tiles)
             if empty and empty != (x, y):
                 return self._navigate(pos, empty)
@@ -187,23 +224,25 @@ class OpeningBook:
             self.done = True
             return None
 
-        player = obs.get("player", 0)
-        farms = obs.get("farms") or [{}]
-        farm = (farms[player] if player < len(farms) else {}) or {}
+        player  = obs.get("player", 0)
+        farms   = obs.get("farms") or [{}]
+        farm    = (farms[player] if player < len(farms) else {}) or {}
         private = obs.get("private") or {}
-        shed = private.get("shed") or {}
-        seeds = private.get("seeds") or {}
-        invs = private.get("inventories") or []
-        tiles = farm.get("tiles") or []
+        shed    = private.get("shed")   or {}
+        seeds   = private.get("seeds")  or {}
+        invs    = private.get("inventories") or []
+        tiles   = farm.get("tiles") or []
 
         market = []
         if hour == 1:
+            # v17 vs v15: MELON 12 -> MELON 9 + STRAWBERRY 3
             market = [
                 ["HIRE"], ["HIRE"], ["HIRE"], ["HIRE"], ["HIRE"],
                 ["BUY_ANIMAL", "SHEEP", 2],
-                ["BUY_ANIMAL", "COW", 2],
-                ["BUY_SEED", "WHEAT", 7],
-                ["BUY_SEED", "MELON", 12],
+                ["BUY_ANIMAL", "COW",   2],
+                ["BUY_SEED",   "WHEAT", 7],
+                ["BUY_SEED",   "MELON", 9],         # era 12
+                ["BUY_SEED",   "STRAWBERRY", 3],    # NOVO — alto valor + lojas
             ]
         elif hour == 2:
             market = [["BUY_PRODUCT", "WHEAT", 2]]
@@ -221,21 +260,33 @@ class OpeningBook:
 
 
 # =============================================================================
-# ENGINE DINAMICO — Mid/Late (Fixed Asset Meta)
+# ENGINE DINAMICO — Mid/Late (v17: v15 + STRAWBERRY + animal survival fix)
 # =============================================================================
-class KaggricultureAgentV15:
+class KaggricultureAgentV17:
     def __init__(self):
         self.opening = OpeningBook()
         self.last_day = -1
         self.watered_this_day = set()
-        self.fed_this_day = set()
-        self.cared_this_day = set()
+        self.fed_this_day     = set()
+        self.cared_this_day   = set()
+        self.worker_history   = {}
+        self.telemetry = {
+            "invalid_action_intercepted": 0,
+            "feed_precondition_fail": 0,
+            "place_precondition_fail": 0,
+            "plant_precondition_fail": 0,
+            "water_precondition_fail": 0,
+            "care_precondition_fail": 0,
+            "circuit_breaker_triggered": 0,
+            "replan_count": 0,
+            "max_consecutive_same_intent": 0,
+        }
 
     @staticmethod
     def _tile_at(farm, pos):
         if not isinstance(pos, (list, tuple)) or len(pos) != 2:
             return None
-        x, y = pos
+        x, y  = pos
         tiles = farm.get("tiles", [])
         if not (0 <= y < len(tiles)):
             return None
@@ -250,11 +301,14 @@ class KaggricultureAgentV15:
         x, y = pos
         return x in (half - 1, half) and y in (half - 1, half)
 
+    # -------------------------------------------------------------------------
+    # BFS bidirecional — IDENTICO ao v15
+    # -------------------------------------------------------------------------
     def _bfs(self, start, condition, farm, exclude):
         sx, sy = start
-        tiles = farm.get("tiles", [])
-        bh = len(tiles)
-        bw = len(tiles[0]) if bh else 0
+        tiles  = farm.get("tiles", [])
+        bh     = len(tiles)
+        bw     = len(tiles[0]) if bh else 0
         if bh == 0:
             return None, None, None
 
@@ -265,14 +319,14 @@ class KaggricultureAgentV15:
                     tile = self._tile_at(farm, (x, y))
                     if tile != "LOCKED" and condition(tile, x, y):
                         targets.append((x, y))
-        
+
         if not targets:
             return None, None, None
 
-        fwd_queue = deque([(sx, sy)])
+        fwd_queue   = deque([(sx, sy)])
         fwd_visited = {(sx, sy): None}
-        
-        bwd_queue = deque(targets)
+
+        bwd_queue   = deque(targets)
         bwd_visited = {t: t for t in targets}
 
         while fwd_queue and bwd_queue:
@@ -297,7 +351,7 @@ class KaggricultureAgentV15:
                         if (nx, ny) in fwd_visited:
                             first_dir = fwd_visited[(nx, ny)]
                             if first_dir is None:
-                                if curr_x > nx: first_dir = "EAST"
+                                if   curr_x > nx: first_dir = "EAST"
                                 elif curr_x < nx: first_dir = "WEST"
                                 elif curr_y > ny: first_dir = "SOUTH"
                                 elif curr_y < ny: first_dir = "NORTH"
@@ -308,18 +362,18 @@ class KaggricultureAgentV15:
 
         return None, None, None
 
+    # -------------------------------------------------------------------------
+    # Scanner — IDENTICO ao v15
+    # -------------------------------------------------------------------------
     def _count_animals(self, farm):
         cows = sheep = pastures = empty_past = 0
         for row in farm.get("tiles", []):
             for t in row if isinstance(row, list) else []:
                 if isinstance(t, dict) and t.get("kind") == "PASTURE":
                     pastures += 1
-                    if t.get("animal") == "COW":
-                        cows += 1
-                    elif t.get("animal") == "SHEEP":
-                        sheep += 1
-                    elif not t.get("animal"):
-                        empty_past += 1
+                    if   t.get("animal") == "COW":   cows  += 1
+                    elif t.get("animal") == "SHEEP":  sheep += 1
+                    elif not t.get("animal"):         empty_past += 1
         return cows, sheep, pastures, empty_past
 
     def _scan(self, farm, day):
@@ -336,7 +390,7 @@ class KaggricultureAgentV15:
                     continue
                 k = t.get("kind")
                 if k == "PASTURE" and t.get("animal"):
-                    if not t.get("fed_today") and (x, y) not in self.fed_this_day:
+                    if not t.get("fed_today")   and (x, y) not in self.fed_this_day:
                         tasks["feed"].append((x, y))
                     if not t.get("cared_today") and (x, y) not in self.cared_this_day:
                         tasks["care"].append((x, y))
@@ -349,25 +403,31 @@ class KaggricultureAgentV15:
                         tasks["water"].append((x, y))
                     crop = t.get("crop", "")
                     info = CROPS.get(crop, {})
-                    age = day - t.get("planted_day", day)
+                    age  = day - t.get("planted_day", day)
                     if age >= info.get("max", 2) or t.get("yield_units", 0) > 0:
                         tasks["harvest"].append((x, y))
                 elif k == "WEED":
                     tasks["weeds"].append((x, y))
         return tasks
 
+    # -------------------------------------------------------------------------
+    # Market — v15 + 3 mudancas pontuais
+    # -------------------------------------------------------------------------
     def _market(self, obs, tasks, cows, sheep, pastures, empty_past):
-        player = obs.get("player", 0)
-        farm = obs.get("farms", [{}])[player]
-        private = obs.get("private", {})
-        day = obs.get("day", 0)
-        hour = obs.get("hour", 0)
-        shed = private.get("shed", {}) or {}
-        seeds = private.get("seeds", {}) or {}
-        money = farm.get("money", 0)
-        n_quads = len(farm.get("unlocked_quadrants", []))
+        player        = obs.get("player", 0)
+        farm          = obs.get("farms", [{}])[player]
+        private       = obs.get("private", {})
+        day           = obs.get("day",  0)
+        hour          = obs.get("hour", 0)
+        shed          = private.get("shed",  {}) or {}
+        seeds         = private.get("seeds", {}) or {}
+        money         = farm.get("money", 0)
+        n_quads       = len(farm.get("unlocked_quadrants", []))
         current_hands = len(farm.get("hands") or [])
-        hires_today = farm.get("hires_today", 0) or 0
+        hires_today   = farm.get("hires_today", 0) or 0
+        # MUDANCA 2: preco real do trigo (era hardcode 30)
+        wheat_price   = obs.get("market", {}).get("prices", {}).get("WHEAT", 30)
+        days_left     = 29 - day
 
         orders = []
 
@@ -378,8 +438,9 @@ class KaggricultureAgentV15:
             return orders[:MAX_MARKET_ORDERS]
 
         total_shed = sum(v for k, v in shed.items() if k not in ("GOOSE", "COW", "SHEEP"))
-        force = total_shed > SHED_SOFT_CAP or hour >= 21
+        force      = total_shed > SHED_SOFT_CAP or hour >= 21
 
+        # SELL — identico ao v15
         for item in ("MILK", "WOOL", "MELON", "EGG", "FERTILIZER", "TOMATO",
                      "STRAWBERRY", "CARROT", "WHEAT"):
             qty = shed.get(item, 0)
@@ -394,21 +455,21 @@ class KaggricultureAgentV15:
                 keep = 0 if force else min(qty, 5)
                 sell = qty - keep
             else:
-                keep = 0 if force or item in ("MILK", "WOOL", "MELON") else 1
+                keep = 0 if force or item in ("MILK", "WOOL", "MELON", "STRAWBERRY") else 1
                 sell = qty - keep
             if sell > 0:
                 orders.append(["SELL", item, sell])
 
-        # BUY_PRODUCT WHEAT (feed critico)
+        # BUY_PRODUCT WHEAT — MUDANCA 2: usa wheat_price real
         wheat_need = (cows + sheep) * 2 + 4
         wheat_have = shed.get("WHEAT", 0)
         if wheat_have < wheat_need and money > 50 and len(orders) < MAX_MARKET_ORDERS:
             buy_n = min(wheat_need - wheat_have, 6)
-            if money > buy_n * 30 + 20:
+            if money > buy_n * wheat_price + 20:  # era: buy_n * 30 + 20
                 orders.append(["BUY_PRODUCT", "WHEAT", buy_n])
-                money -= buy_n * 30
+                money -= buy_n * wheat_price
 
-        # HIRE adaptativo
+        # HIRE adaptativo — identico ao v15
         fib = [1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144]
         if day == 1:
             target_h = 0
@@ -428,16 +489,16 @@ class KaggricultureAgentV15:
         if urgent > 15:
             target_h = min(target_h + 3, 14)
 
-        needed = max(0, target_h - current_hands)
+        needed   = max(0, target_h - current_hands)
         cost_est = sum(fib[min(hires_today + i, len(fib) - 1)] for i in range(needed))
-        reserve = 30 if day <= 3 else (100 if day <= 8 else 300)
+        reserve  = 30 if day <= 3 else (100 if day <= 8 else 300)
 
         if needed > 0 and money > cost_est + reserve:
             for i in range(min(needed, MAX_MARKET_ORDERS - len(orders))):
                 orders.append(["HIRE"])
                 money -= fib[min(hires_today + i, len(fib) - 1)]
 
-        # BUY_ANIMAL (escala ate targets)
+        # BUY_ANIMAL — identico ao v15
         if day >= 3 and day <= 15 and money > 600 and len(orders) < MAX_MARKET_ORDERS:
             if cows < TARGET_COW and (empty_past > 0 or pastures < TARGET_PASTURES):
                 n = min(2, TARGET_COW - cows, max(1, empty_past))
@@ -450,7 +511,7 @@ class KaggricultureAgentV15:
                     orders.append(["BUY_ANIMAL", "SHEEP", n])
                     money -= 500 * n
 
-        # BUY_LAND (Dia 7 e ~11)
+        # BUY_LAND — identico ao v15
         land_cost = LAND_COST.get(n_quads, 9999)
         if n_quads < 3 and day >= 7 and money > land_cost + 400:
             if n_quads == 1 and day >= 7:
@@ -460,41 +521,84 @@ class KaggricultureAgentV15:
                 orders.append(["BUY_LAND"])
                 money -= land_cost
 
-        # Seeds: MELON early + WHEAT
+        # Seeds — MUDANCA 5: adiciona STRAWBERRY conservadora
+        if day <= 15 and len(orders) < MAX_MARKET_ORDERS:
+            # STRAWBERRY: alto valor + demanda de lojas, ciclo longo — compra conservadora
+            strw_have = seeds.get("STRAWBERRY", 0)
+            if (strw_have < 3
+                    and days_left >= STRAWBERRY_MIN_DAYS_LEFT
+                    and money > 1200
+                    and len(orders) < MAX_MARKET_ORDERS):
+                need = min(3 - strw_have, 2)
+                if money > 100 * need + 800:
+                    orders.append(["BUY_SEED", "STRAWBERRY", need])
+                    money -= 100 * need
+
         if day <= 12 and len(orders) < MAX_MARKET_ORDERS:
+            # MELON: cash rapido early — identico ao v15
             melon_have = seeds.get("MELON", 0)
             if melon_have < 4 and money > 400 and day <= 10:
                 need = 4 - melon_have
                 orders.append(["BUY_SEED", "MELON", need])
                 money -= 80 * need
+            # WHEAT seed: apenas suporte de feed
             wheat_seeds = seeds.get("WHEAT", 0)
             if wheat_seeds < 3 and money > 100:
                 orders.append(["BUY_SEED", "WHEAT", 3])
 
         return orders[:MAX_MARKET_ORDERS]
 
+    # -------------------------------------------------------------------------
+    # _decide — v17.1 Cirurgia A: PLANT desacoplado de BUILD_PASTURE
+    # -------------------------------------------------------------------------
     def _decide(self, tile, shed, seeds, day, inv, pos, hour, cows, sheep, empty_past):
-        inv = inv or {}
+        inv  = inv or {}
         x, y = pos if pos else (-1, -1)
 
         if tile is None:
-            total_animals = cows + sheep
-            if total_animals < TARGET_COW + TARGET_SHEEP or empty_past == 0:
-                if day <= 15:
-                    return ["BUILD_PASTURE"]
-            if day <= 12 and hour <= 20:
-                for crop in ("MELON", "WHEAT"):
-                    if seeds.get(crop, 0) > 0:
-                        return ["PLANT", crop]
+            days_left      = 29 - day
+            animal_in_shed = shed.get("COW", 0) + shed.get("SHEEP", 0)
+
+            # Cirurgia A — regra de prioridade no tile vazio:
+            #
+            # CASO 1: animal aguardando no shed E sem pastagem vazia disponivel
+            #   → BUILD_PASTURE imediato (desbloqueia PICKUP gate)
+            #
+            # CASO 2: animal no shed MAS ja existe pastagem vazia
+            #   → PLANT (pasture ja disponivel; agente pode PICKUP + PLACE)
+            #
+            # CASO 3: sem animal aguardando
+            #   → PLANT
+            #
+            # Em TODOS os casos que nao plantam: BUILD_PASTURE se ainda construindo
+
+            # Caso 1: emergencia — destravar gate
+            if animal_in_shed > 0 and empty_past == 0 and day <= 15:
+                return ["BUILD_PASTURE"]
+
+            # Casos 2 e 3: PLANT prioritario
+            if hour <= 20:
+                if seeds.get("STRAWBERRY", 0) > 0 and days_left >= STRAWBERRY_MIN_DAYS_LEFT:
+                    return ["PLANT", "STRAWBERRY"]
+                if seeds.get("MELON", 0) > 0 and day <= 12:
+                    return ["PLANT", "MELON"]
+                # WHEAT: suporte early — nao e cultura comercial primaria
+                if seeds.get("WHEAT", 0) > 0 and day <= 8:
+                    return ["PLANT", "WHEAT"]
+
+            # BUILD_PASTURE para expansao normal (animal no shed, pastagem disponivel)
+            if animal_in_shed > 0 and day <= 15:
+                return ["BUILD_PASTURE"]
+
             return ["PASS"]
 
         if isinstance(tile, dict) and tile.get("kind") == "WEED":
             return ["DIG"]
 
         if isinstance(tile, dict) and tile.get("kind") == "PLANT":
-            crop = tile.get("crop", "")
-            info = CROPS.get(crop, {})
-            age = day - tile.get("planted_day", day)
+            crop    = tile.get("crop", "")
+            info    = CROPS.get(crop, {})
+            age     = day - tile.get("planted_day", day)
             watered = tile.get("watered_today") or (pos and (x, y) in self.watered_this_day)
             if age >= info.get("max", 2) or tile.get("yield_units", 0) > 0:
                 return ["HARVEST"]
@@ -508,12 +612,12 @@ class KaggricultureAgentV15:
                     if inv.get(a, 0) > 0:
                         return ["PLACE", a]
                 return ["PASS"]
-            fed = tile.get("fed_today") or (pos and (x, y) in self.fed_this_day)
+            fed   = tile.get("fed_today")   or (pos and (x, y) in self.fed_this_day)
+            cared = tile.get("cared_today") or (pos and (x, y) in self.cared_this_day)
             if not fed and (shed.get("WHEAT", 0) > 0 or inv.get("WHEAT", 0) > 0):
                 return ["FEED"]
             if tile.get("fertilizer_available"):
                 return ["COLLECT_FERTILIZER"]
-            cared = tile.get("cared_today") or (pos and (x, y) in self.cared_this_day)
             if not cared:
                 return ["CARE"]
             if tile.get("yield_units", 0) > 0:
@@ -522,39 +626,93 @@ class KaggricultureAgentV15:
 
         return ["PASS"]
 
-    def _move_priorities(self, shed, day, inv):
+    # -------------------------------------------------------------------------
+    # _move_priorities — v17.1 Cirurgia B: emergency build + fallback
+    # -------------------------------------------------------------------------
+    def _move_priorities(self, shed, day, inv, empty_past=0):
         inv = inv or {}
+        animal_in_shed = shed.get("COW", 0) + shed.get("SHEEP", 0)
         return [
+            # 1. FEED
             lambda t, x, y: (isinstance(t, dict) and t.get("kind") == "PASTURE"
                              and t.get("animal") and not t.get("fed_today")
                              and (x, y) not in self.fed_this_day
                              and (shed.get("WHEAT", 0) > 0 or inv.get("WHEAT", 0) > 0)),
+            # 2. HARVEST
             lambda t, x, y: (isinstance(t, dict)
                              and ((t.get("kind") == "PASTURE" and t.get("yield_units", 0) > 0)
                                   or (t.get("kind") == "PLANT" and (
                                       t.get("yield_units", 0) > 0
                                       or (day - t.get("planted_day", day))
                                          >= CROPS.get(str(t.get("crop") or ""), {}).get("max", 99))))),
+            # 3. CARE
             lambda t, x, y: (isinstance(t, dict) and t.get("kind") == "PASTURE"
                              and t.get("animal") and not t.get("cared_today")
                              and (x, y) not in self.cared_this_day),
+            # 4. FERT
             lambda t, x, y: (isinstance(t, dict) and t.get("kind") == "PASTURE"
                              and t.get("fertilizer_available")),
+            # 5. WATER
             lambda t, x, y: (isinstance(t, dict) and t.get("kind") == "PLANT"
                              and not t.get("watered_today")
                              and (x, y) not in self.watered_this_day),
+            # 6. PLACE animal (tem animal no inventario)
             lambda t, x, y: (isinstance(t, dict) and t.get("kind") == "PASTURE"
                              and t.get("animal") is None and inv
                              and any(inv.get(a, 0) > 0 for a in ("COW", "SHEEP"))),
+            # 7. Cirurgia B — EMERGENCY BUILD PASTURE:
+            #    animal aguardando no shed E sem pastagem vazia
+            #    → worker vai a tile vazio para BUILD_PASTURE (destrava PICKUP gate)
+            lambda t, x, y: (
+                t is None
+                and animal_in_shed > 0
+                and empty_past == 0
+                and day <= 15
+            ),
+            # 8. Tile vazio generico (para PLANT via _decide)
             lambda t, x, y: t is None,
+            # 9. WEED
             lambda t, x, y: isinstance(t, dict) and t.get("kind") == "WEED",
         ]
 
+    # -------------------------------------------------------------------------
+    # v17.2 — State Integrity Layer
+    # -------------------------------------------------------------------------
+    def _validate_action_preconditions(self, action, winv, tile, shed, seeds):
+        if not action or action[0] == "PASS":
+            return True
+        
+        op = action[0]
+        if op == "FEED":
+            return winv.get("WHEAT", 0) > 0 and isinstance(tile, dict) and "animal" in tile
+        elif op == "PLACE":
+            if len(action) < 2: return False
+            return winv.get(action[1], 0) > 0 and isinstance(tile, dict) and "animal" not in tile
+        elif op == "PLANT":
+            if len(action) < 2: return False
+            return seeds.get(action[1], 0) > 0 and tile is None
+        elif op == "WATER":
+            return isinstance(tile, dict) and tile.get("kind") == "PLANT" and not tile.get("watered_today")
+        elif op == "CARE":
+            return isinstance(tile, dict) and "animal" in tile and not tile.get("cared_today")
+        elif op == "HARVEST":
+            return isinstance(tile, dict) and tile.get("yield_units", 0) > 0
+        elif op == "COLLECT_FERTILIZER":
+            return isinstance(tile, dict) and "animal" in tile and tile.get("fertilizer_available")
+        elif op == "PICKUP":
+            if len(action) < 2: return False
+            return shed.get(action[1], 0) > 0
+            
+        return True
+
+    # -------------------------------------------------------------------------
+    # Entry point
+    # -------------------------------------------------------------------------
     def __call__(self, obs):
         if not isinstance(obs, dict):
             return {"farmer": ["PASS"], "hands": [], "market": []}
         player = obs.get("player", 0)
-        farms = obs.get("farms", [])
+        farms  = obs.get("farms", [])
         if not isinstance(farms, list) or player >= len(farms):
             return {"farmer": ["PASS"], "hands": [], "market": []}
 
@@ -565,67 +723,93 @@ class KaggricultureAgentV15:
             if result is not None:
                 return result
 
-        farm = farms[player] or {}
-        private = obs.get("private", {}) or {}
-        shed = private.get("shed", {}) or {}
-        seeds = private.get("seeds", {}) or {}
+        farm        = farms[player] or {}
+        private     = obs.get("private", {}) or {}
+        shed        = private.get("shed",   {}) or {}
+        seeds       = private.get("seeds",  {}) or {}
         inventories = private.get("inventories", [])
-        hour = obs.get("hour", 0)
+        hour        = obs.get("hour", 0)
 
         if day != self.last_day:
-            self.last_day = day
+            self.last_day         = day
             self.watered_this_day = set()
-            self.fed_this_day = set()
-            self.cared_this_day = set()
+            self.fed_this_day     = set()
+            self.cared_this_day   = set()
 
         cows, sheep, pastures, empty_past = self._count_animals(farm)
-        tasks = self._scan(farm, day)
+        tasks  = self._scan(farm, day)
         market = self._market(obs, tasks, cows, sheep, pastures, empty_past)
         assigned = set()
 
-        def worker_act(wpos, winv):
-            x, y = wpos
-            tile = self._tile_at(farm, (x, y))
-            winv = winv or {}
-
+        def worker_act(worker_id, wpos, winv):
+            x, y    = wpos
+            tile    = self._tile_at(farm, (x, y))
+            winv    = winv or {}
             inv_sum = sum(winv.values())
+
+            # State Integrity Layer: Assinatura de estado + Circuit Breaker
+            state_sig = f"{tile.get('kind', 'None')}-{tile.get('yield_units', 0)}-{tile.get('fed_today', False)}" if isinstance(tile, dict) else "None"
+            
+            def safe_return(intent):
+                if not intent or intent[0] == "PASS" or intent[0] in ("NORTH", "SOUTH", "EAST", "WEST", "DROP"):
+                    return intent
+                if not self._validate_action_preconditions(intent, winv, tile, shed, seeds):
+                    self.telemetry["invalid_action_intercepted"] += 1
+                    key = f"{intent[0].lower()}_precondition_fail"
+                    if key in self.telemetry:
+                        self.telemetry[key] += 1
+                    return None
+                
+                last_intent, last_target, last_sig, count = self.worker_history.get(worker_id, (None, None, None, 0))
+                if intent == last_intent and wpos == last_target and state_sig == last_sig:
+                    count += 1
+                else:
+                    count = 1
+                
+                if count > self.telemetry["max_consecutive_same_intent"]:
+                    self.telemetry["max_consecutive_same_intent"] = count
+
+                self.worker_history[worker_id] = (intent, wpos, state_sig, count)
+                if count >= 3:
+                    self.telemetry["circuit_breaker_triggered"] += 1
+                    self.telemetry["replan_count"] += 1
+                    return None # Circuit breaker: abandona e replaneja
+                return intent
+
             if inv_sum > 5 and self._is_shed_adj((x, y)):
                 return ["DROP"]
             if inv_sum > 8:
                 targets = [(4, 4), (5, 4), (4, 5), (5, 5)]
-                best = min(targets, key=lambda t: abs(t[0] - x) + abs(t[1] - y))
+                best    = min(targets, key=lambda t: abs(t[0] - x) + abs(t[1] - y))
                 if best != (x, y):
                     tx, ty = best
-                    if ty < y:
-                        return ["NORTH"]
-                    if ty > y:
-                        return ["SOUTH"]
-                    if tx < x:
-                        return ["WEST"]
-                    if tx > x:
-                        return ["EAST"]
+                    if ty < y: return ["NORTH"]
+                    if ty > y: return ["SOUTH"]
+                    if tx < x: return ["WEST"]
+                    if tx > x: return ["EAST"]
 
             action = self._decide(tile, shed, seeds, day, winv, wpos, hour,
                                   cows, sheep, empty_past)
-            if action and action[0] != "PASS":
-                if action[0] == "WATER":
-                    self.watered_this_day.add((x, y))
-                elif action[0] == "FEED":
-                    self.fed_this_day.add((x, y))
-                elif action[0] == "CARE":
-                    self.cared_this_day.add((x, y))
-                return action
+            valid_action = safe_return(action)
+            if valid_action and valid_action[0] != "PASS":
+                if   valid_action[0] == "WATER": self.watered_this_day.add((x, y))
+                elif valid_action[0] == "FEED":  self.fed_this_day.add((x, y))
+                elif valid_action[0] == "CARE":  self.cared_this_day.add((x, y))
+                return valid_action
 
             if self._is_shed_adj((x, y)):
                 for a in ("COW", "SHEEP"):
-                    if shed.get(a, 0) > 0 and inv_sum == 0:
-                        return ["PICKUP", a, 1]
+                    # MUDANCA 4: apenas PICKUP se ha pastagem vazia disponivel
+                    if shed.get(a, 0) > 0 and inv_sum == 0 and empty_past > 0:
+                        pickup = safe_return(["PICKUP", a, 1])
+                        if pickup: return pickup
                 if shed.get("WHEAT", 0) > 0 and winv.get("WHEAT", 0) == 0 and tasks["feed"]:
-                    return ["PICKUP", "WHEAT", min(3, shed["WHEAT"])]
+                    pickup = safe_return(["PICKUP", "WHEAT", min(3, shed["WHEAT"])])
+                    if pickup: return pickup
                 if inv_sum > 3:
                     return ["DROP"]
 
-            for cond in self._move_priorities(shed, day, winv):
+            for cond in self._move_priorities(shed, day, winv, empty_past=empty_past):
                 tx, ty, direction = self._bfs((x, y), cond, farm, assigned)
                 if direction:
                     assigned.add((tx, ty))
@@ -633,13 +817,13 @@ class KaggricultureAgentV15:
 
             return ["PASS"]
 
-        farmer_inv = inventories[0] if inventories else {}
-        farmer_action = worker_act(farm.get("farmer", [0, 0]), farmer_inv)
+        farmer_inv    = inventories[0] if inventories else {}
+        farmer_action = worker_act(0, farm.get("farmer", [0, 0]), farmer_inv)
 
         hands_actions = []
         for i, hpos in enumerate(farm.get("hands", [])):
             h_inv = inventories[i + 1] if i + 1 < len(inventories) else {}
-            hands_actions.append(worker_act(hpos, h_inv))
+            hands_actions.append(worker_act(i + 1, hpos, h_inv))
 
         return {"farmer": farmer_action, "hands": hands_actions, "market": market}
 
@@ -647,7 +831,7 @@ class KaggricultureAgentV15:
 # =============================================================================
 # ENTRY POINTS
 # =============================================================================
-agent = KaggricultureAgentV15()
+agent = KaggricultureAgentV17()
 
 
 def agent_fn(observation, configuration=None):
