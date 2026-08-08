@@ -2,20 +2,67 @@
 __pycache__/
 *.py[cod]
 *$py.class
-
-# Kaggle downloads / dados locais da competição
-.kaggle_dl/
-
-# Credenciais
-.kaggle/
-*token*
-access_token
-kaggle.json
-
-# Ambiente
-.env
-.venv/
+*.so
+.Python
+env/
 venv/
-replays/ep_*.json
-replays/sample_episode.json
-replays/a4_vs_v3_seed42_replay.json
+.venv/
+.env
+
+# Kaggle
+.kaggle/
+*.kaggle.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+Desktop.ini
+
+# Testes e análise local
+replays/
+forensics/
+perdi/
+*.json
+*.jsonl
+*.csv
+*.log
+*.md
+
+# Backups de submission
+submission_*_backup.py
+submission_v17_3_a*.py
+submission_v18*.py
+submission_v15_restored.py
+
+# Scripts de análise/benchmark
+analysis.py
+analyze_*.py
+audit_*.py
+calc_stats.py
+check_v17.py
+compare_*.py
+forensics_*.py
+generate_*.py
+implementation_plan.md
+matchmaking_parser.py
+run_*.py
+test_*.py
+validate_*.py
+
+# Arquivos de resultado/forensics
+a*_*.txt
+a*_*.json
+a*_*.md
+intercepted.json
+diffs.txt
+
+# Arquivos de dados Kaggle baixados
+*.tar.gz
+*.zip
+kaggriculture-episodes-*/
+kaggriculture-engine-reference-tables/
