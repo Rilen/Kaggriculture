@@ -78,6 +78,9 @@ TARGET_PASTURES = 14
 # STRAWBERRY: ciclo de 10-16 dias; so planta se ha tempo para fechar
 STRAWBERRY_MIN_DAYS_LEFT = 12
 
+# A.11 — Seb Meta Copy targets
+STRAWBERRY_TARGET = 15
+
 
 # =============================================================================
 # OPENING BOOK — Dia 0
@@ -479,11 +482,16 @@ class KaggricultureAgentV17:
                 orders.append(["BUY_PRODUCT", "WHEAT", buy_n])
                 money -= buy_n * wheat_price
 
-        # HIRE adaptativo — identico ao v15
+        # BUY_PRODUCT FERTILIZER — A.11: Seb buys 248 BUY_PRODUCT, we need more fertilizer
+        if money > 400 and len(orders) < MAX_MARKET_ORDERS:
+            buy_n = min(5, MAX_MARKET_ORDERS - len(orders))
+            if money > 100 * buy_n + 400:
+                orders.append(["BUY_PRODUCT", "FERTILIZER", buy_n])
+                money -= 100 * buy_n
+
+        # HIRE adaptativo — A.11: hire every day 0-20 (Seb consistency)
         fib = [1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144]
-        if day == 1:
-            target_h = 0
-        elif day <= 3:
+        if day <= 3:
             target_h = 4
         elif day <= 6:
             target_h = 5
@@ -491,8 +499,10 @@ class KaggricultureAgentV17:
             target_h = 8
         elif day <= 14:
             target_h = 11
+        elif day <= 20:
+            target_h = 12
         else:
-            target_h = 8
+            target_h = 10
 
         urgent = (len(tasks["feed"]) + len(tasks["care"])
                   + len(tasks["harvest"]) + len(tasks["water"]))
@@ -531,16 +541,15 @@ class KaggricultureAgentV17:
                 orders.append(["BUY_LAND"])
                 money -= land_cost
 
-        # Seeds — MUDANCA 5: adiciona STRAWBERRY conservadora
-        if day <= 15 and len(orders) < MAX_MARKET_ORDERS:
-            # STRAWBERRY: alto valor + demanda de lojas, ciclo longo — compra conservadora
+        # Seeds — A.11: STRAWBERRY expansion (Seb buys 43 total, we buy 15)
+        if day <= 20 and len(orders) < MAX_MARKET_ORDERS:
             strw_have = seeds.get("STRAWBERRY", 0)
-            if (strw_have < 3
+            if (strw_have < STRAWBERRY_TARGET
                     and days_left >= STRAWBERRY_MIN_DAYS_LEFT
-                    and money > 1200
+                    and money > 600
                     and len(orders) < MAX_MARKET_ORDERS):
-                need = min(3 - strw_have, 2)
-                if money > 100 * need + 800:
+                need = min(STRAWBERRY_TARGET - strw_have, 4)
+                if money > 100 * need + 400:
                     orders.append(["BUY_SEED", "STRAWBERRY", need])
                     money -= 100 * need
 
@@ -564,6 +573,21 @@ class KaggricultureAgentV17:
     def _decide(self, tile, shed, seeds, day, inv, pos, hour, cows, sheep, empty_past):
         inv  = inv or {}
         x, y = pos if pos else (-1, -1)
+
+        # A.11 — Endgame liquidation
+        if day >= 28:
+            if isinstance(tile, dict) and tile.get("kind") == "PASTURE" and tile.get("animal"):
+                if tile.get("yield_units", 0) > 0:
+                    return ["HARVEST"]
+                return ["PASS"]
+            if isinstance(tile, dict) and tile.get("kind") == "PLANT":
+                if tile.get("yield_units", 0) > 0:
+                    return ["HARVEST"]
+                return ["PASS"]
+            return ["PASS"]
+        
+        if day >= 25 and tile is None:
+            return ["PASS"]
 
         if tile is None:
             days_left      = 29 - day
@@ -681,7 +705,7 @@ class KaggricultureAgentV17:
                                       t.get("yield_units", 0) > 0
                                       or (day - t.get("planted_day", day))
                                          >= CROPS.get(str(t.get("crop") or ""), {}).get("max", 99))))),
-            # 5. FERT
+            # 5. FERT — A.11: moved above PLACE (Seb collects 352 fert vs 223 avg)
             lambda t, x, y: (isinstance(t, dict) and t.get("kind") == "PASTURE"
                              and t.get("fertilizer_available")),
             # 6. PLACE animal (tem animal no inventario)
@@ -845,7 +869,7 @@ class KaggricultureAgentV17:
                 if shed.get("WHEAT", 0) > 0 and winv.get("WHEAT", 0) == 0 and tasks["feed"]:
                     pickup = safe_return(["PICKUP", "WHEAT", min(3, shed["WHEAT"])])
                     if pickup: return pickup
-                if inv_sum > 3:
+                if inv_sum > 2:
                     release_target()
                     return ["DROP"]
 
