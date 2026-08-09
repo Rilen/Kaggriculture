@@ -81,6 +81,10 @@ STRAWBERRY_MIN_DAYS_LEFT = 12
 # A.11 — Seb Meta Copy targets
 STRAWBERRY_TARGET = 15
 
+# A.12 — Value-First Agent
+TASK_VALUE_THRESHOLD = 50
+AGGRESSIVE_ENDGAME_DAY = 26
+
 
 # =============================================================================
 # OPENING BOOK — Dia 0
@@ -585,7 +589,7 @@ class KaggricultureAgentV17:
     # -------------------------------------------------------------------------
     # _decide — v17.1 Cirurgia A: PLANT desacoplado de BUILD_PASTURE
     # -------------------------------------------------------------------------
-    def _decide(self, tile, shed, seeds, day, inv, pos, hour, cows, sheep, empty_past, tasks=None):
+    def _decide(self, tile, shed, seeds, day, inv, pos, hour, cows, sheep, empty_past, tasks=None, farm=None):
         inv  = inv or {}
         x, y = pos if pos else (-1, -1)
         urgent = 0
@@ -669,11 +673,11 @@ class KaggricultureAgentV17:
             crop    = tile.get("crop", "")
             info    = CROPS.get(crop, {})
             age     = day - tile.get("planted_day", day)
-            watered = tile.get("watered_today") or (pos and (x, y) in self.watered_this_day)
             if age >= info.get("max", 2) or tile.get("yield_units", 0) > 0:
                 return ["HARVEST"]
-            if not watered:
-                return ["WATER"]
+            if not tile.get("watered_today") and self._should_water(tile, day):
+                if self._is_task_worth_doing(tile, "WATER", day, inv):
+                    return ["WATER"]
             return ["PASS"]
 
         if isinstance(tile, dict) and tile.get("kind") == "PASTURE":
@@ -685,11 +689,13 @@ class KaggricultureAgentV17:
             fed   = tile.get("fed_today")   or (pos and (x, y) in self.fed_this_day)
             cared = tile.get("cared_today") or (pos and (x, y) in self.cared_this_day)
             if not fed and (shed.get("WHEAT", 0) > 0 or inv.get("WHEAT", 0) > 0):
-                return ["FEED"]
-            if tile.get("fertilizer_available"):
+                if self._is_task_worth_doing(tile, "FEED", day, inv):
+                    return ["FEED"]
+            if tile.get("fertilizer_available") and self._should_collect_fert(tile, day, farm):
                 return ["COLLECT_FERTILIZER"]
-            if not cared:
-                return ["CARE"]
+            if not cared and self._is_care_valuable(tile, day):
+                if self._is_task_worth_doing(tile, "CARE", day, inv):
+                    return ["CARE"]
             if tile.get("yield_units", 0) > 0:
                 return ["HARVEST"]
             return ["PASS"]
@@ -725,41 +731,129 @@ class KaggricultureAgentV17:
         return count > 0
 
     # -------------------------------------------------------------------------
+    # A.12 — Value-First Agent
+    # -------------------------------------------------------------------------
+    def _task_value(self, tile, action_type, day, inv):
+        if action_type == "WATER":
+            if isinstance(tile, dict) and tile.get("kind") == "PLANT":
+                crop = tile.get("crop") or ""
+                info = CROPS.get(crop, {})
+                age = day - (tile.get("planted_day") or day)
+                max_age = info.get("max", 2)
+                if age >= max_age:
+                    return 0
+                yield_units = tile.get("yield_units") or 0
+                price = info.get("price", 0)
+                days_left = max(1, max_age - age)
+                return (yield_units * price) / days_left
+            return 0
+
+        if action_type == "FEED":
+            if isinstance(tile, dict) and tile.get("animal"):
+                animal = tile.get("animal") or ""
+                info = ANIMALS.get(animal, {})
+                price = info.get("price", 0)
+                interval = 2 if animal == "COW" else (3 if animal == "SHEEP" else 1)
+                return price / interval
+            return 0
+
+        if action_type == "CARE":
+            if isinstance(tile, dict) and tile.get("animal"):
+                if self._is_care_valuable(tile, day):
+                    animal = tile.get("animal") or ""
+                    info = ANIMALS.get(animal, {})
+                    price = info.get("price", 0)
+                    interval = 2 if animal == "COW" else (3 if animal == "SHEEP" else 1)
+                    return price / interval
+            return 0
+
+        if action_type == "HARVEST":
+            if isinstance(tile, dict):
+                if tile.get("kind") == "PASTURE" and (tile.get("yield_units") or 0) > 0:
+                    animal = tile.get("animal") or ""
+                    info = ANIMALS.get(animal, {})
+                    return info.get("price", 0) * (tile.get("yield_units") or 0)
+                if tile.get("kind") == "PLANT" and (tile.get("yield_units") or 0) > 0:
+                    crop = tile.get("crop") or ""
+                    info = CROPS.get(crop, {})
+                    return info.get("price", 0) * (tile.get("yield_units") or 0)
+            return 0
+
+        if action_type == "COLLECT_FERTILIZER":
+            if isinstance(tile, dict) and tile.get("fertilizer_available"):
+                return 100
+            return 0
+
+        return 0
+
+    def _is_task_worth_doing(self, tile, action_type, day, inv):
+        value = self._task_value(tile, action_type, day, inv)
+        return value >= TASK_VALUE_THRESHOLD
+
+    def _should_collect_fert(self, tile, day, farm):
+        if not isinstance(tile, dict) or tile.get("kind") != "PASTURE":
+            return False
+        if not tile.get("fertilizer_available"):
+            return False
+        if not self._has_high_value_crops(farm or {}):
+            return False
+        if day >= AGGRESSIVE_ENDGAME_DAY:
+            return False
+        return True
+
+    def _should_water(self, tile, day):
+        if not isinstance(tile, dict) or tile.get("kind") != "PLANT":
+            return False
+        if tile.get("watered_today"):
+            return False
+        crop = tile.get("crop") or ""
+        info = CROPS.get(crop, {})
+        age = day - (tile.get("planted_day") or day)
+        max_age = info.get("max", 2)
+        if age >= max_age:
+            return False
+        if crop in ("WHEAT", "CARROT", "MELON") and age >= max_age - 1:
+            return False
+        return True
+
+    # -------------------------------------------------------------------------
     # _move_priorities — v17.1 Cirurgia B: emergency build + fallback
     # -------------------------------------------------------------------------
     def _move_priorities(self, shed, day, inv, empty_past=0, farm=None):
         inv = inv or {}
         animal_in_shed = shed.get("COW", 0) + shed.get("SHEEP", 0)
         return [
-            # 1. WATER — A.5: top priority (opponent waters 5.5x more, crop revenue = survival)
+            # 1. WATER — A.12: value threshold
             lambda t, x, y: (isinstance(t, dict) and t.get("kind") == "PLANT"
                              and not t.get("watered_today")
-                             and (x, y) not in self.watered_this_day),
-            # 2. FEED
+                             and (x, y) not in self.watered_this_day
+                             and self._should_water(t, day)
+                             and self._is_task_worth_doing(t, "WATER", day, inv)),
+            # 2. FEED — A.12: value threshold
             lambda t, x, y: (isinstance(t, dict) and t.get("kind") == "PASTURE"
                              and t.get("animal") and not t.get("fed_today")
                              and (x, y) not in self.fed_this_day
-                             and (shed.get("WHEAT", 0) > 0 or inv.get("WHEAT", 0) > 0)),
-            # 3. CARE — A.10: only if expected days to yield < 3 (~57 steps)
+                             and (shed.get("WHEAT", 0) > 0 or inv.get("WHEAT", 0) > 0)
+                             and self._is_task_worth_doing(t, "FEED", day, inv)),
+            # 3. CARE — A.10 timing + A.12 value threshold
             lambda t, x, y: (isinstance(t, dict) and t.get("kind") == "PASTURE"
                              and t.get("animal") and not t.get("cared_today")
                              and (x, y) not in self.cared_this_day
-                             and self._is_care_valuable(t, day)),
+                             and self._is_care_valuable(t, day)
+                             and self._is_task_worth_doing(t, "CARE", day, inv)),
             # 4. HARVEST
             lambda t, x, y: (isinstance(t, dict)
-                             and ((t.get("kind") == "PASTURE" and t.get("yield_units", 0) > 0)
+                             and ((t.get("kind") == "PASTURE" and (t.get("yield_units") or 0) > 0)
                                   or (t.get("kind") == "PLANT" and (
-                                      t.get("yield_units", 0) > 0
-                                      or (day - t.get("planted_day", day))
+                                      (t.get("yield_units") or 0) > 0
+                                      or (day - (t.get("planted_day") or day))
                                          >= CROPS.get(str(t.get("crop") or ""), {}).get("max", 99))))),
             # 5. PLACE animal (tem animal no inventario)
             lambda t, x, y: (isinstance(t, dict) and t.get("kind") == "PASTURE"
                              and t.get("animal") is None and inv
                              and any(inv.get(a, 0) > 0 for a in ("COW", "SHEEP"))),
-            # 6. COLLECT_FERTILIZER — A.11: only if high-value crops exist
-            lambda t, x, y: (isinstance(t, dict) and t.get("kind") == "PASTURE"
-                             and t.get("fertilizer_available")
-                             and self._has_high_value_crops(farm)),
+            # 6. COLLECT_FERTILIZER — A.12: ultra-seletivo
+            lambda t, x, y: (self._should_collect_fert(t, day, farm)),
             # 7. Cirurgia B — EMERGENCY BUILD PASTURE:
             #    animal aguardando no shed E sem pastagem vazia
             #    → worker vai a tile vazio para BUILD_PASTURE (destrava PICKUP gate)
@@ -902,7 +996,7 @@ class KaggricultureAgentV17:
                     if tx > x: return ["EAST"]
 
             action = self._decide(tile, shed, seeds, day, winv, wpos, hour,
-                                  cows, sheep, empty_past, tasks)
+                                  cows, sheep, empty_past, tasks, farm)
             valid_action = safe_return(action)
             if valid_action and valid_action[0] != "PASS":
                 if   valid_action[0] == "WATER": self.watered_this_day.add((x, y))
