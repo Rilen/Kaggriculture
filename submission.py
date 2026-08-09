@@ -499,33 +499,33 @@ class KaggricultureAgentV17:
                 orders.append(["BUY_PRODUCT", "FERTILIZER", buy_n])
                 money -= 100 * buy_n
 
-        # HIRE adaptativo — A.11: consistent hiring, but with day 1 guard
+        # HIRE seletivo — A.11: only hire when urgent tasks justify it
         fib = [1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144]
         if day == 1:
             target_h = 0
         elif day <= 3:
-            target_h = 4
+            target_h = 3
         elif day <= 6:
-            target_h = 5
+            target_h = 4
         elif day <= 9:
-            target_h = 8
+            target_h = 6
         elif day <= 14:
-            target_h = 11
+            target_h = 8
         elif day <= 20:
-            target_h = 12
+            target_h = 9
         else:
-            target_h = 10
+            target_h = 7
 
         urgent = (len(tasks["feed"]) + len(tasks["care"])
                   + len(tasks["harvest"]) + len(tasks["water"]))
-        if urgent > 15:
-            target_h = min(target_h + 3, 14)
+        if urgent > 12:
+            target_h = min(target_h + 2, 12)
 
         needed   = max(0, target_h - current_hands)
         cost_est = sum(fib[min(hires_today + i, len(fib) - 1)] for i in range(needed))
-        reserve  = 30 if day <= 3 else (100 if day <= 8 else 300)
+        reserve  = 200 if day <= 3 else (300 if day <= 8 else 500)
 
-        if needed > 0 and money > cost_est + reserve:
+        if needed > 0 and urgent > 6 and money > cost_est + reserve:
             for i in range(min(needed, MAX_MARKET_ORDERS - len(orders))):
                 orders.append(["HIRE"])
                 money -= fib[min(hires_today + i, len(fib) - 1)]
@@ -553,25 +553,26 @@ class KaggricultureAgentV17:
                 orders.append(["BUY_LAND"])
                 money -= land_cost
 
-        # Seeds — A.11: STRAWBERRY expansion (balanced, not excessive)
-        if day <= 20 and len(orders) < MAX_MARKET_ORDERS:
+        # Seeds — A.11: STRAWBERRY expansion (selective, not excessive)
+        if day <= 18 and len(orders) < MAX_MARKET_ORDERS:
             strw_have = seeds.get("STRAWBERRY", 0)
             if (strw_have < STRAWBERRY_TARGET
                     and days_left >= STRAWBERRY_MIN_DAYS_LEFT
-                    and money > 600
+                    and money > 800
                     and len(orders) < MAX_MARKET_ORDERS):
-                need = min(STRAWBERRY_TARGET - strw_have, 2)
-                if money > 100 * need + 400:
+                need = min(STRAWBERRY_TARGET - strw_have, 1)
+                if money > 100 * need + 600:
                     orders.append(["BUY_SEED", "STRAWBERRY", need])
                     money -= 100 * need
 
-        if day <= 12 and len(orders) < MAX_MARKET_ORDERS:
+        if day <= 10 and len(orders) < MAX_MARKET_ORDERS:
             # MELON: cash rapido early — identico ao v15
             melon_have = seeds.get("MELON", 0)
-            if melon_have < 4 and money > 400 and day <= 10:
-                need = 4 - melon_have
-                orders.append(["BUY_SEED", "MELON", need])
-                money -= 80 * need
+            if melon_have < 4 and money > 600 and day <= 10:
+                need = min(4 - melon_have, 2)
+                if money > 80 * need + 400:
+                    orders.append(["BUY_SEED", "MELON", need])
+                    money -= 80 * need
             # WHEAT seed: bulk buy only when truly low
             wheat_seeds = seeds.get("WHEAT", 0)
             if wheat_seeds < 5 and money > 200:
@@ -584,11 +585,15 @@ class KaggricultureAgentV17:
     # -------------------------------------------------------------------------
     # _decide — v17.1 Cirurgia A: PLANT desacoplado de BUILD_PASTURE
     # -------------------------------------------------------------------------
-    def _decide(self, tile, shed, seeds, day, inv, pos, hour, cows, sheep, empty_past):
+    def _decide(self, tile, shed, seeds, day, inv, pos, hour, cows, sheep, empty_past, tasks=None):
         inv  = inv or {}
         x, y = pos if pos else (-1, -1)
+        urgent = 0
+        if tasks:
+            urgent = (len(tasks.get("feed", [])) + len(tasks.get("care", []))
+                      + len(tasks.get("harvest", [])) + len(tasks.get("water", [])))
 
-        # A.11 — Endgame liquidation
+        # A.11 — Endgame liquidation (aggressive)
         if day >= 28:
             if isinstance(tile, dict) and tile.get("kind") == "PASTURE" and tile.get("animal"):
                 if tile.get("yield_units", 0) > 0:
@@ -600,8 +605,22 @@ class KaggricultureAgentV17:
                 return ["PASS"]
             return ["PASS"]
         
+        if day >= 27 and tile is None:
+            return ["PASS"]
+        
         if day >= 25 and tile is None:
             return ["PASS"]
+        
+        # A.11 — Endgame: stop watering one-time crops
+        if day >= 27 and isinstance(tile, dict) and tile.get("kind") == "PLANT":
+            crop = tile.get("crop", "")
+            info = CROPS.get(crop, {})
+            age = day - tile.get("planted_day", day)
+            if crop in ("WHEAT", "CARROT", "MELON"):
+                if age >= info.get("max", 2):
+                    if tile.get("yield_units", 0) > 0:
+                        return ["HARVEST"]
+                return ["PASS"]
 
         if tile is None:
             days_left      = 29 - day
@@ -626,6 +645,9 @@ class KaggricultureAgentV17:
 
             # Casos 2 e 3: PLANT prioritario
             if hour <= 20:
+                # A.11 — PASS if no urgent tasks and not early game
+                if day > 10 and urgent <= 2:
+                    return ["PASS"]
                 if seeds.get("STRAWBERRY", 0) > 0 and days_left >= STRAWBERRY_MIN_DAYS_LEFT:
                     return ["PLANT", "STRAWBERRY"]
                 if seeds.get("MELON", 0) > 0 and day <= 12:
@@ -691,10 +713,21 @@ class KaggricultureAgentV17:
     def _is_care_valuable(self, tile, day):
         return self._expected_days_to_yield(tile, day) < 3
 
+    @staticmethod
+    def _has_high_value_crops(farm):
+        count = 0
+        for row in farm.get("tiles", []):
+            for tile in row:
+                if isinstance(tile, dict) and tile.get("kind") == "PLANT":
+                    crop = tile.get("crop", "")
+                    if crop in ("STRAWBERRY", "MELON"):
+                        count += 1
+        return count > 0
+
     # -------------------------------------------------------------------------
     # _move_priorities — v17.1 Cirurgia B: emergency build + fallback
     # -------------------------------------------------------------------------
-    def _move_priorities(self, shed, day, inv, empty_past=0):
+    def _move_priorities(self, shed, day, inv, empty_past=0, farm=None):
         inv = inv or {}
         animal_in_shed = shed.get("COW", 0) + shed.get("SHEEP", 0)
         return [
@@ -723,9 +756,10 @@ class KaggricultureAgentV17:
             lambda t, x, y: (isinstance(t, dict) and t.get("kind") == "PASTURE"
                              and t.get("animal") is None and inv
                              and any(inv.get(a, 0) > 0 for a in ("COW", "SHEEP"))),
-            # 6. COLLECT_FERTILIZER — moved below PLACE (Seb: 352 vs our 1173 was excessive)
+            # 6. COLLECT_FERTILIZER — A.11: only if high-value crops exist
             lambda t, x, y: (isinstance(t, dict) and t.get("kind") == "PASTURE"
-                             and t.get("fertilizer_available")),
+                             and t.get("fertilizer_available")
+                             and self._has_high_value_crops(farm)),
             # 7. Cirurgia B — EMERGENCY BUILD PASTURE:
             #    animal aguardando no shed E sem pastagem vazia
             #    → worker vai a tile vazio para BUILD_PASTURE (destrava PICKUP gate)
@@ -866,7 +900,7 @@ class KaggricultureAgentV17:
                     if tx > x: return ["EAST"]
 
             action = self._decide(tile, shed, seeds, day, winv, wpos, hour,
-                                  cows, sheep, empty_past)
+                                  cows, sheep, empty_past, tasks)
             valid_action = safe_return(action)
             if valid_action and valid_action[0] != "PASS":
                 if   valid_action[0] == "WATER": self.watered_this_day.add((x, y))
@@ -890,7 +924,7 @@ class KaggricultureAgentV17:
             def is_target_valid(tx, ty):
                 target_tile = self._tile_at(farm, (tx, ty))
                 if target_tile == "LOCKED": return False
-                for cond in self._move_priorities(shed, day, winv, empty_past=empty_past):
+                for cond in self._move_priorities(shed, day, winv, empty_past=empty_past, farm=farm):
                     if cond(target_tile, tx, ty):
                         return True
                 return False
@@ -935,7 +969,7 @@ class KaggricultureAgentV17:
                         else:
                             return ["PASS"]
 
-            for cond in self._move_priorities(shed, day, winv, empty_past=empty_past):
+            for cond in self._move_priorities(shed, day, winv, empty_past=empty_past, farm=farm):
                 tx, ty, direction = self._bfs((x, y), cond, farm, assigned)
                 if direction:
                     self.worker_targets[worker_id] = (tx, ty)
