@@ -499,7 +499,7 @@ class KaggricultureAgentV17:
                 orders.append(["BUY_PRODUCT", "FERTILIZER", buy_n])
                 money -= 100 * buy_n
 
-        # HIRE seletivo — A.11: only hire when urgent tasks justify it
+        # HIRE muito seletivo — A.11: only when truly overwhelmed
         fib = [1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144]
         if day == 1:
             target_h = 0
@@ -518,14 +518,14 @@ class KaggricultureAgentV17:
 
         urgent = (len(tasks["feed"]) + len(tasks["care"])
                   + len(tasks["harvest"]) + len(tasks["water"]))
-        if urgent > 12:
+        if urgent > 15:
             target_h = min(target_h + 2, 12)
 
         needed   = max(0, target_h - current_hands)
         cost_est = sum(fib[min(hires_today + i, len(fib) - 1)] for i in range(needed))
-        reserve  = 200 if day <= 3 else (300 if day <= 8 else 500)
+        reserve  = 400 if day <= 3 else (600 if day <= 8 else 800)
 
-        if needed > 0 and urgent > 6 and money > cost_est + reserve:
+        if needed > 0 and urgent > 10 and money > cost_est + reserve and hires_today < 3:
             for i in range(min(needed, MAX_MARKET_ORDERS - len(orders))):
                 orders.append(["HIRE"])
                 money -= fib[min(hires_today + i, len(fib) - 1)]
@@ -846,6 +846,8 @@ class KaggricultureAgentV17:
             tile    = self._tile_at(farm, (x, y))
             winv    = winv or {}
             inv_sum = sum(winv.values())
+            urgent  = (len(tasks["feed"]) + len(tasks["care"])
+                       + len(tasks["harvest"]) + len(tasks["water"]))
 
             # State Integrity Layer: Assinatura de estado + Circuit Breaker
             state_sig = f"{tile.get('kind', 'None')}-{tile.get('yield_units', 0)}-{tile.get('fed_today', False)}" if isinstance(tile, dict) else "None"
@@ -921,6 +923,10 @@ class KaggricultureAgentV17:
                     release_target()
                     return ["DROP"]
 
+            # A.11 — PASS strategy: no urgent tasks + no target = idle
+            if worker_id not in self.worker_targets and urgent <= 3 and day > 8:
+                return ["PASS"]
+
             def is_target_valid(tx, ty):
                 target_tile = self._tile_at(farm, (tx, ty))
                 if target_tile == "LOCKED": return False
@@ -976,6 +982,10 @@ class KaggricultureAgentV17:
                     self.telemetry["target_claims"] += 1
                     assigned.add((tx, ty))
                     return [direction]
+
+            # A.11 — PASS if no target found and no urgent tasks
+            if worker_id not in self.worker_targets and urgent <= 3 and day > 8:
+                return ["PASS"]
 
             return ["PASS"]
 
