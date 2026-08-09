@@ -482,16 +482,28 @@ class KaggricultureAgentV17:
                 orders.append(["BUY_PRODUCT", "WHEAT", buy_n])
                 money -= buy_n * wheat_price
 
-        # BUY_PRODUCT FERTILIZER — A.11: Seb buys 248 BUY_PRODUCT, we need more fertilizer
-        if money > 400 and len(orders) < MAX_MARKET_ORDERS:
-            buy_n = min(5, MAX_MARKET_ORDERS - len(orders))
-            if money > 100 * buy_n + 400:
+        # BUY_PRODUCT FERTILIZER — A.11: only if we have STRAWBERRY/MELON planted
+        strw_count = 0
+        melon_count = 0
+        for row in farm.get("tiles", []):
+            for tile in row:
+                if isinstance(tile, dict):
+                    if tile.get("crop") == "STRAWBERRY":
+                        strw_count += 1
+                    elif tile.get("crop") == "MELON":
+                        melon_count += 1
+        
+        if (strw_count > 0 or melon_count > 0) and money > 800 and len(orders) < MAX_MARKET_ORDERS:
+            buy_n = min(3, MAX_MARKET_ORDERS - len(orders))
+            if money > 100 * buy_n + 800:
                 orders.append(["BUY_PRODUCT", "FERTILIZER", buy_n])
                 money -= 100 * buy_n
 
-        # HIRE adaptativo — A.11: hire every day 0-20 (Seb consistency)
+        # HIRE adaptativo — A.11: consistent hiring, but with day 1 guard
         fib = [1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144]
-        if day <= 3:
+        if day == 1:
+            target_h = 0
+        elif day <= 3:
             target_h = 4
         elif day <= 6:
             target_h = 5
@@ -541,14 +553,14 @@ class KaggricultureAgentV17:
                 orders.append(["BUY_LAND"])
                 money -= land_cost
 
-        # Seeds — A.11: STRAWBERRY expansion (Seb buys 43 total, we buy 15)
+        # Seeds — A.11: STRAWBERRY expansion (balanced, not excessive)
         if day <= 20 and len(orders) < MAX_MARKET_ORDERS:
             strw_have = seeds.get("STRAWBERRY", 0)
             if (strw_have < STRAWBERRY_TARGET
                     and days_left >= STRAWBERRY_MIN_DAYS_LEFT
                     and money > 600
                     and len(orders) < MAX_MARKET_ORDERS):
-                need = min(STRAWBERRY_TARGET - strw_have, 4)
+                need = min(STRAWBERRY_TARGET - strw_have, 2)
                 if money > 100 * need + 400:
                     orders.append(["BUY_SEED", "STRAWBERRY", need])
                     money -= 100 * need
@@ -560,10 +572,12 @@ class KaggricultureAgentV17:
                 need = 4 - melon_have
                 orders.append(["BUY_SEED", "MELON", need])
                 money -= 80 * need
-            # WHEAT seed: apenas suporte de feed
+            # WHEAT seed: bulk buy only when truly low
             wheat_seeds = seeds.get("WHEAT", 0)
-            if wheat_seeds < 3 and money > 100:
-                orders.append(["BUY_SEED", "WHEAT", 3])
+            if wheat_seeds < 5 and money > 200:
+                buy_n = min(10 - wheat_seeds, 5)
+                if money > 10 * buy_n + 200:
+                    orders.append(["BUY_SEED", "WHEAT", buy_n])
 
         return orders[:MAX_MARKET_ORDERS]
 
@@ -705,13 +719,13 @@ class KaggricultureAgentV17:
                                       t.get("yield_units", 0) > 0
                                       or (day - t.get("planted_day", day))
                                          >= CROPS.get(str(t.get("crop") or ""), {}).get("max", 99))))),
-            # 5. FERT — A.11: moved above PLACE (Seb collects 352 fert vs 223 avg)
-            lambda t, x, y: (isinstance(t, dict) and t.get("kind") == "PASTURE"
-                             and t.get("fertilizer_available")),
-            # 6. PLACE animal (tem animal no inventario)
+            # 5. PLACE animal (tem animal no inventario)
             lambda t, x, y: (isinstance(t, dict) and t.get("kind") == "PASTURE"
                              and t.get("animal") is None and inv
                              and any(inv.get(a, 0) > 0 for a in ("COW", "SHEEP"))),
+            # 6. COLLECT_FERTILIZER — moved below PLACE (Seb: 352 vs our 1173 was excessive)
+            lambda t, x, y: (isinstance(t, dict) and t.get("kind") == "PASTURE"
+                             and t.get("fertilizer_available")),
             # 7. Cirurgia B — EMERGENCY BUILD PASTURE:
             #    animal aguardando no shed E sem pastagem vazia
             #    → worker vai a tile vazio para BUILD_PASTURE (destrava PICKUP gate)
