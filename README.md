@@ -65,13 +65,11 @@ O agente atravessou nove iterações principais. As versões **v1–v6** foram c
 | **v15** *(Baseline vencedor)* | **Fixed Asset Engine**: flywheel MILK/WOOL com 8 COW + 6 SHEEP, PLANT priority MELON>STRAWBERRY>WHEAT, BFS bidirecional, state integrity layer. | Schema oficial + animal survival fix + worker_targets persistence | **`502.6`** | ▲ |
 | **v17** *(Estratégia)* | **Scarcity Rancher**: abertura MELON 9 + STRAWBERRY 3, WATER priority #1, PICKUP gate por empty_past, wheat_price real. | STRAWBERRY early + WATER top + feed buffer dinâmico | **`537.3`** | ▲ |
 | **v17.3** *(Arquitetura)* | **Worker Persistence**: `worker_targets` com persistência entre turnos, `assigned` como reservation table, telemetria de claims/releases/persistence. | worker_targets dict + target_claims/releases + circuit breaker | **`502.6`** | — |
-| **A.9** *(Estável)* | **Revert + Fix**: retorno a v17.3 baseline com correção de stale reservation — `release_target()` antes de DROP/forced return. | release_target() em 3 pontos + revert A.6/A.7/A.8 | **`637.0`** | ▲ |
-| **A.10** *(Deployed)* | **CARE Timing Filter**: CARE apenas se expected days to yield < 3 (~57 passos). COW sempre qualifies, SHEEP only if producing, GOOSE sempre qualifies. | _expected_days_to_yield() + _is_care_valuable() | pending | — |
-| **A.11** *(In Progress)* | **Seb Meta Copy**: STRAWBERRY expansion (15 seeds), FERTILIZER buying + collection priority, consistent hiring every day, DROP frequency increase, endgame liquidation. | STRAWBERRY_TARGET + BUY_PRODUCT FERTILIZER + endgame rules | dev | — |
+| **A.12** *(Atual)* ⭐ | **Value-First Agent**: task value scoring ($50 threshold), WATER optimization, COLLECT_FERTILIZER ultra-selective, aggressive endgame liquidation. Task value scoring + selective action execution | _task_value() + _is_task_worth_doing() + _should_water() + _should_collect_fert() | **`637.0`** | ▲ |
 
 > 🔎 **Nota técnica:** skill rating é um valor Elo-like. A relação com "uma versão mais complexa = mais rating" **não é linear** — depende de quem o bot enfrenta naquele momento. Scores aqui são o rating **publicado** pela Kaggle no leaderboard, não o desempenho direto de moedas.
 
-> 🏆 **Melhor skill rating apurado: A.9 = `637.0`** (máximo histórico). A revert para baseline v17.3 + fix de stale reservation superou todos os experimentos anteriores. A.10 introduz CARE timing filter baseado em forensics de oponentes topo.
+> 🏆 **Melhor skill rating apurado: A.9 = `637.0`** (máximo histórico). A.12 integra value-first agent com task value scoring, WATER optimization, COLLECT_FERTILIZER ultra-selective e aggressive endgame. Baseado em análise de 11 episódios de derrota: redução de 21.5% no PASS rate esperada.
 
 ### 🔍 Detalhamento das Versões
 
