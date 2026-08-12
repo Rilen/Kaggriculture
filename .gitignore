@@ -9,6 +9,9 @@ venv/
 .venv/
 .env
 
+# Node (pyright LSP)
+node_modules/
+
 # Kaggle
 .kaggle/
 *.kaggle.json
@@ -27,11 +30,14 @@ Desktop.ini
 replays/
 forensics/
 perdi/
+archive/
 *.json
 *.jsonl
 *.csv
 *.log
-*.md
+
+# Inteligência coletada via MCP (mantém .agente/ rastreado, exceto kernels baixados)
+.agente/intel/kernels/
 
 # Backups de submission
 submission_*_backup.py
