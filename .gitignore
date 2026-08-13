@@ -9,66 +9,40 @@ venv/
 .venv/
 .env
 
-# Node (pyright LSP)
+# Node
 node_modules/
 
-# Kaggle
+# Kaggle (token)
 .kaggle/
 *.kaggle.json
 
-# IDE
+# IDE / OS
 .vscode/
 .idea/
 *.swp
 *.swo
-
-# OS
 Thumbs.db
 Desktop.ini
 
-# Testes e análise local
+# Dados locais pesados (replays, derrotas, análises antigas) — NÃO versionar
 replays/
 forensics/
 perdi/
 archive/
-*.json
-*.jsonl
-*.csv
+.kaggle_dl/
 *.log
 
-# Inteligência coletada via MCP (mantém .agente/ rastreado, exceto kernels baixados)
+# Inteligência coletada via MCP (kernels baixados)
 .agente/intel/kernels/
 
-# Backups de submission
+# Backups de submission obsoletos
 submission_*_backup.py
 submission_v17_3_a*.py
 submission_v18*.py
 submission_v15_restored.py
 submission_a*.py
 
-# Scripts de análise/benchmark
-analysis.py
-analyze_*.py
-audit_*.py
-calc_stats.py
-check_v17.py
-compare_*.py
-forensics_*.py
-generate_*.py
-implementation_plan.md
-matchmaking_parser.py
-run_*.py
-test_*.py
-validate_*.py
-
-# Arquivos de resultado/forensics
-a*_*.txt
-a*_*.json
-a*_*.md
-intercepted.json
-diffs.txt
-
-# Arquivos temporários de deploy
+# Temporários de deploy
 *.tar.gz
 *.zip
 kaggriculture-episodes-*/

@@ -1,0 +1,31 @@
+{
+  "$schema": "https://app.kilo.ai/config.json",
+  "default_agent": "agente",
+  "instructions": [
+    ".agente/VERDADE.md",
+    ".agente/REGRAS_DE_OURO.md",
+    ".agente/HISTORICO.md",
+    ".agente/INTEL.md",
+    ".agente/SESSAO.md"
+  ],
+  "mcp": {
+    "kaggle": {
+      "type": "remote",
+      "url": "https://www.kaggle.com/mcp",
+      "enabled": true
+    }
+  },
+  "permission": {
+    "bash": "allow",
+    "external_directory": {
+      "/home/rtl/*": "allow",
+      "/home/rtl/.kaggle/*": "allow"
+    }
+  },
+  "lsp": {
+    "python": {
+      "command": ["node_modules/.bin/pyright-langserver", "--stdio"],
+      "extensions": [".py"]
+    }
+  }
+}

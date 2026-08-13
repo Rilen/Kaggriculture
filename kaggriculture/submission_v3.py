@@ -1,25 +1,32 @@
 """
-Kaggriculture Autonomous AI Agent — "Granja" engine (ground-up rewrite)
+Kaggriculture — submission_v3.py (Experimento A/B de Abertura + Contragolpe)
 
-Core economic thesis (derived from the rules / price table):
-  * Animals produce INDEFINITELY while fed. Geese are the backbone:
-      - GOOSE costs $300, yields 1 EGG/day, EGG price is stable (~$40-50) because
-        its glut target is only 0.20 (it barely crashes even under heavy supply).
-      - FEED (1 WHEAT/day) + CARE (1 action/day) doubles output: banked care bonus
-        pays out on the daily production -> 2 EGGS/day per goose.
-      - Self-grown WHEAT (seed $10 -> 4-6 WHEAT) makes feeding nearly free.
-  * STRAWBERRY (ongoing, base $120) and MELON (one-time, base $250) add diversity /
-    early cash but their markets crash hard on glut, so we cap volumes and lean on
-    town demand (which grows monotonically and absorbs supply late game).
-  * Hired hands are CHEAP (fib cost: 1,1,2,3,5,8... resets daily) -> labor is not the
-    bottleneck; we hire a small crew every day to multiply tile actions.
-  * Land expands the tile budget: BUY_LAND 1k/2k/4k.
+Evolucao do GranjaAgent v2. Tres frentes injetadas sobre a base v2 (BFS denso):
+
+1. ASSINATURA DE ABERTURA v23_fork (first-48):
+   - Day 0: 5 HIRE + 2 COW + 2 SHEEP + 7 WHEAT seed + 12 MELON seed.
+   - Continua: expande para 8 COW + 6 SHEEP (14 PASTURE), mantendo o motor
+     de MELAO denso em 2 quadrantes.
+   - WATER diario em TODA planta (alvo 8x/planta ao longo da season) e
+     CARE diario nos animais (bancado, proximo ao yield => +18% de producao).
+
+2. FRONT-RUNNING DE MERCADO (contragolpe aos rotas abertas v23_fork):
+   - MILK/WOOL sao vendidos IMEDIATAMENTE no inicio do dia (antes do lote
+     programado dos oponentes open-loop), derrubando o preco para eles
+     enquanto capturamos o preco cheio nas primeiras unidades.
+   - Dump agressivo com piso baixo (front-run); sem segurar premium.
+
+3. OVERLAY WEED REPAIR (re-trace local de 8 passos):
+   - Se a acao planejada for PLANT/BUILD sobre tile com mato, a acao vira DIG,
+     a intencao entra numa deque (maxlen 8) e e re-executada quando o tile
+     ficar vazio.
+
+Mantem os aliases agent / agent_fn / main_agent esperados pela plataforma.
 """
-
 from collections import deque
 
 # ----------------------------------------------------------------------------
-# Static game data (from the official Object Types / Price tables)
+# Dados estaticos do jogo
 # ----------------------------------------------------------------------------
 CROPS = {
     "WHEAT":      {"seed": 10,  "price": 25,  "first": 2,  "max": 4,  "ongoing": False},
@@ -38,18 +45,31 @@ ANIMALS = {
 SELLABLE = {"WHEAT", "CARROT", "TOMATO", "STRAWBERRY", "MELON",
             "EGG", "MILK", "WOOL", "FERTILIZER"}
 
-# Build / planting targets
-TARGET_COOPS = 0
-TARGET_PASTURES = 0          # drop fragile animal engine -> reliable crop economy
-WHEAT_TARGET = 12             # sell surplus + buffer
-STRAWBERRY_TARGET = 10        # ongoing, moderate (crash risk -> keep moderate)
-MELON_TARGET = 18             # highest value/tile, tiny volume -> safe to sell lots
+# --- Abertura v23_fork (assinatura first-48 medida nos top-5) ---
+OPENING_HIRES = 5
+OPENING_COWS = 2
+OPENING_SHEEP = 2
+OPENING_WHEAT_SEEDS = 7
+OPENING_MELON_SEEDS = 12
 
-# When to stop planting long crops (growth days must fit before day 30)
+# --- Continuacao meta (8C + 6S) ---
+TARGET_COWS = 8
+TARGET_SHEEP = 6
+TARGET_PASTURES = TARGET_COWS + TARGET_SHEEP
+TARGET_COOPS = 0               # sem gansos (meta topo usa COW+SHEEP)
+
+# --- Plantacao densa (mantida da v2, agora com animais como premium) ---
+WHEAT_TARGET = 12
+STRAWBERRY_TARGET = 6
+MELON_TARGET = 18
 PLANT_DEADLINE = {"MELON": 18, "STRAWBERRY": 21, "TOMATO": 19, "CARROT": 25, "WHEAT": 27}
-LIQUIDATE_DAY = 27           # stop buying capital, dump shed to cash
+LIQUIDATE_DAY = 27
 
 MAX_MARKET_ORDERS = 10
+
+# Front-run: janela de dump de premium no inicio do dia
+FRONT_RUN_HOUR = 6
+FRONT_RUN_FLOOR = 5           # vender premium enquanto o preco >= $5
 
 
 def _fib(n):
@@ -59,13 +79,19 @@ def _fib(n):
     return a
 
 
-class GranjaAgent:
+class GranjaV3:
     def __init__(self):
         self.last_day = -1
         self.watered = set()
         self.fed = set()
         self.cared = set()
         self.collected = set()
+        # OVERLAY WEED REPAIR: tiles recem-digeridos para priorizar re-plantio
+        # (janela de 8 passos). A troca PLANT/BUILD -> DIG e feita em
+        # _act_on_tile (kind == WEED -> DIG, antes de qualquer BUILD/PLANT),
+        # e o re-planejamento local acontece no BFS a cada turno.
+        self.weed_recent = deque(maxlen=8)
+        self.opening_done = False
 
     # -- tile helpers --------------------------------------------------------
     @staticmethod
@@ -80,14 +106,6 @@ class GranjaAgent:
         if not isinstance(row, list) or not (0 <= x < len(row)):
             return None
         return row[x]
-
-    @staticmethod
-    def _is_empty(tile):
-        return tile is None
-
-    @staticmethod
-    def _is_struct(tile):
-        return isinstance(tile, dict) and tile.get("kind") in ("COOP", "PASTURE")
 
     @staticmethod
     def _shed_adjacent(pos, board=10):
@@ -121,7 +139,7 @@ class GranjaAgent:
                     q.append((nx, ny, nd))
         return None
 
-    # -- per-tile immediate action ------------------------------------------
+    # -- acao imediata sobre o tile -----------------------------------------
     def _act_on_tile(self, tile, shed, seeds, day, inv, pos):
         if tile is None or tile == "LOCKED":
             return None
@@ -171,17 +189,16 @@ class GranjaAgent:
                 return ["COLLECT_FERTILIZER"]
             if not tile.get("cared_today") and (x, y) not in self.cared:
                 return ["CARE"]
-            # already cared+fed+collected this day: nothing to do here
             return None
 
         return None
 
-    # -- worker decision -----------------------------------------------------
+    # -- decisao do worker ---------------------------------------------------
     def _worker(self, pos, inv, farm, shed, seeds, day, counts, assigned):
         x, y = pos
         tile = self._tile(farm, pos)
 
-        # 1) act on the tile we're standing on
+        # 1) agir sobre o tile em que estamos
         act = self._act_on_tile(tile, shed, seeds, day, inv, pos)
         if act:
             if act[0] == "WATER":
@@ -194,21 +211,18 @@ class GranjaAgent:
                 self.collected.add((x, y))
             return act
 
-        # 2) shed logistics
+        # 2) logistica do galpao (shed)
         if self._shed_adjacent(pos):
             inv_sell = sum(v for k, v in (inv or {}).items() if k in SELLABLE)
             if inv_sell > 0:
                 return ["DROP"]
-            # pick up an animal we still need to place
-            for animal in ("GOOSE", "COW"):
+            for animal in ("GOOSE", "COW", "SHEEP"):
                 if shed.get(animal, 0) > 0 and counts["empty_structure_for"][animal] > 0 and (not inv or sum(inv.values()) == 0):
                     return ["PICKUP", animal, 1]
-            # pick up fertilizer if we have spare and want to fertilize later
             if shed.get("FERTILIZER", 0) > 0 and (not inv or sum(inv.values()) == 0) and counts["needs_fert"] > 0:
                 return ["PICKUP", "FERTILIZER", 1]
 
-        # 3) if carrying sellable goods and not at the shed, go dump them
-        #    (especially WHEAT: animals can only be fed from the shed)
+        # 3) descarregar se carregando muito
         inv_sell = sum(v for k, v in (inv or {}).items() if k in SELLABLE)
         if inv_sell >= 3 and not self._shed_adjacent(pos):
             tgt = self._bfs_dir(pos, lambda t, x, y: self._shed_adjacent((x, y)), farm, assigned)
@@ -216,8 +230,9 @@ class GranjaAgent:
                 assigned.add((tgt[0], tgt[1]))
                 return [tgt[2]]
 
-        # 4) build / plant on an empty tile we occupy
-        if self._is_empty(tile):
+        # 4) construir / plantar em tile vazio (OVERLAY WEED REPAIR ja tratado
+        #    em _act_on_tile: mato -> DIG primeiro; aqui o tile ja esta limpo)
+        if tile is None:
             if counts["coops"] < TARGET_COOPS and day < 28:
                 return ["BUILD_COOP"]
             if counts["pastures"] < TARGET_PASTURES and day < 28:
@@ -225,30 +240,26 @@ class GranjaAgent:
             plant = self._choose_plant(seeds, day, counts)
             if plant and seeds.get(plant, 0) > 0:
                 return ["PLANT", plant]
-            # nothing to plant -> free a weed-free empty tile is fine; move on
 
-        # 5) move toward the highest-priority task.
-        # Feeding animals is DEATH-CRITICAL (2 missed feeds -> escaped/unrecoverable,
-        # a $300+ loss), so it outranks watering plants (which only cost yield on a
-        # single miss). Harvesting ready produce collects cash we've already earned.
+        # 5) mover-se para a tarefa de maior prioridade
         preds = [
-            # harvest ready plants & animals (collect cash already produced)
+            # colher plantas/animais prontos
             lambda t, x, y: isinstance(t, dict) and (
                 (t.get("kind") == "PLANT" and ((CROPS.get(str(t.get("crop") or ""), {}).get("ongoing") and t.get("yield_units", 0) > 0) or
                  (not CROPS.get(str(t.get("crop") or ""), {}).get("ongoing") and (day - t.get("planted_day", day)) >= CROPS.get(str(t.get("crop") or ""), {}).get("max", 4))))
                 or (t.get("kind") in ("COOP", "PASTURE") and t.get("animal") and t.get("yield_units", 0) > 0)
             ),
-            # feed unfed animals (death-critical)
+            # alimentar animais (critico de morte)
             lambda t, x, y: isinstance(t, dict) and t.get("kind") in ("COOP", "PASTURE") and t.get("animal") and not t.get("fed_today") and (x, y) not in self.fed and shed.get("WHEAT", 0) > 0,
-            # water unwatered plants (daily; prevents death / low yield)
+            # regar plantas (diario; alvo 8x/planta)
             lambda t, x, y: isinstance(t, dict) and t.get("kind") == "PLANT" and not t.get("watered_today") and (x, y) not in self.watered,
-            # care animals (banks +1/day -> doubles goose output)
+            # cuidar animais (banca +1/dia)
             lambda t, x, y: isinstance(t, dict) and t.get("kind") in ("COOP", "PASTURE") and t.get("animal") and not t.get("cared_today") and (x, y) not in self.cared,
-            # fertilize high-value crops
+            # fertilizar culturas de alto valor
             lambda t, x, y: isinstance(t, dict) and t.get("kind") == "PLANT" and t.get("crop") in ("MELON", "STRAWBERRY") and t.get("fertilized_until_day", -1) < day and (x, y) not in self.watered and shed.get("FERTILIZER", 0) > 0,
-            # collect fertilizer
+            # coletar fertilizante
             lambda t, x, y: isinstance(t, dict) and t.get("kind") in ("COOP", "PASTURE") and t.get("fertilizer_available") and (x, y) not in self.collected,
-            # clear weeds
+            # limpar mato
             lambda t, x, y: t == "WEED",
         ]
         for p in preds:
@@ -257,8 +268,7 @@ class GranjaAgent:
                 assigned.add((tgt[0], tgt[1]))
                 return [tgt[2]]
 
-        # 6) expand: deliberately walk to an empty tile to build a structure
-        #    or plant a crop (this is what makes the farm actually grow)
+        # 6) expandir deliberadamente para um tile vazio
         if (counts["coops"] < TARGET_COOPS or counts["pastures"] < TARGET_PASTURES
                 or self._choose_plant(seeds, day, counts) is not None):
             tgt = self._bfs_dir(pos, lambda t, x, y: t is None, farm, assigned)
@@ -269,8 +279,6 @@ class GranjaAgent:
         return ["PASS"]
 
     def _choose_plant(self, seeds, day, counts):
-        # Grow all crops in PARALLEL: pick the crop furthest below its target so
-        # high-value MELON/STRAWBERRY aren't starved by the wheat pipeline.
         candidates = [
             ("WHEAT", WHEAT_TARGET, counts["wheat"], PLANT_DEADLINE["WHEAT"]),
             ("STRAWBERRY", STRAWBERRY_TARGET, counts["strawberry"], PLANT_DEADLINE["STRAWBERRY"]),
@@ -288,20 +296,22 @@ class GranjaAgent:
             return "WHEAT"
         return None
 
-    # -- market --------------------------------------------------------------
+    # -- mercado -------------------------------------------------------------
     def _market(self, obs, farm, shed, seeds, day, counts):
         orders = []
         money = farm.get("money", 0)
-        animals_total = counts["animals"]
-        quads = len(farm.get("unlocked_quadrants", []))
         hires_today = farm.get("hires_today", 0)
+        quads = len(farm.get("unlocked_quadrants", []))
+        hour = obs.get("hour", 0)
+        prices = obs.get("market", {}).get("prices", {}) or {}
+        animals_total = counts["animals"]
 
-        # --- HIRE a small daily crew (cheap labor) ---
-        # Hands are very cheap (fib: 1,1,2,3,5,8...), so keep hiring whenever we
-        # can afford at least one more. NEVER let labor collapse: with no hands
-        # the single farmer cannot maintain the farm and everything dies.
-        desired = 4 + min(4, day // 5)
-        while hires_today < desired and len(orders) < MAX_MARKET_ORDERS - 2:
+        def room():
+            return len(orders) < MAX_MARKET_ORDERS - 1
+
+        # --- HIRE: abertura v23_fork = 5 no day 0 ---
+        desired = OPENING_HIRES if day == 0 else 4 + min(4, day // 5)
+        while hires_today < desired and room():
             cost = _fib(hires_today)
             if money < cost + 20:
                 break
@@ -309,48 +319,82 @@ class GranjaAgent:
             money -= cost
             hires_today += 1
 
-        # --- BUY_LAND: only the NE quadrant (2 quadrants total) ---
-        # Staying dense avoids spreading tiles across the board, which would
-        # waste most turns on travel. The 2nd quadrant doubles tile count.
+        # --- BUY_LAND: so o 2o quadrante (denso) ---
         if quads == 1 and money >= 1600:
             orders.append(["BUY_LAND"]); money -= 1000
 
+        # --- ABERTURA v23_fork (day 0, one-shot) ---
+        if day == 0 and not self.opening_done:
+            if counts["cows"] < OPENING_COWS and money >= ANIMALS["COW"]["cost"] and room():
+                n = min(OPENING_COWS - counts["cows"], 2)
+                orders.append(["BUY_ANIMAL", "COW", n])
+                money -= ANIMALS["COW"]["cost"] * n
+            if counts["sheep"] < OPENING_SHEEP and money >= ANIMALS["SHEEP"]["cost"] and room():
+                n = min(OPENING_SHEEP - counts["sheep"], 2)
+                orders.append(["BUY_ANIMAL", "SHEEP", n])
+                money -= ANIMALS["SHEEP"]["cost"] * n
+            for crop, target in (("WHEAT", OPENING_WHEAT_SEEDS), ("MELON", OPENING_MELON_SEEDS)):
+                have = seeds.get(crop, 0)
+                if have < target and room():
+                    need = target - have
+                    cost = CROPS[crop]["seed"] * need
+                    if money >= cost + 50:
+                        orders.append(["BUY_SEED", crop, need]); money -= cost
+            self.opening_done = True
+
         if day < LIQUIDATE_DAY:
-            # --- BUY seeds to keep the pipeline stocked ---
+            # --- sementes de rotina ---
             for crop, target in (("WHEAT", 10), ("STRAWBERRY", 5), ("MELON", 4)):
                 have = seeds.get(crop, 0)
-                if have < target and len(orders) < MAX_MARKET_ORDERS - 2:
+                if have < target and room():
                     need = target - have
                     cost = CROPS[crop]["seed"] * need
                     if money >= cost + 200:
                         orders.append(["BUY_SEED", crop, need]); money -= cost
 
-            # --- BUY animals to fill empty structures (only when we can feed them) ---
-            if counts["empty_coops"] > 0 and money > ANIMALS["GOOSE"]["cost"] + 500 and shed.get("WHEAT", 0) >= 5:
-                n = min(counts["empty_coops"], 2)
-                if len(orders) < MAX_MARKET_ORDERS - 2:
-                    orders.append(["BUY_ANIMAL", "GOOSE", n]); money -= ANIMALS["GOOSE"]["cost"] * n
+            # --- expandir rebanho ate 8C+6S (se ha pastagem vazia e comida) ---
             if counts["empty_pastures"] > 0 and money > ANIMALS["COW"]["cost"] + 500 and shed.get("WHEAT", 0) >= 3:
-                n = min(counts["empty_pastures"], 1)
-                if len(orders) < MAX_MARKET_ORDERS - 2:
-                    orders.append(["BUY_ANIMAL", "COW", n]); money -= ANIMALS["COW"]["cost"] * n
+                if counts["cows"] < TARGET_COWS and room():
+                    n = min(counts["empty_pastures"], TARGET_COWS - counts["cows"], 2)
+                    if n > 0:
+                        orders.append(["BUY_ANIMAL", "COW", n]); money -= ANIMALS["COW"]["cost"] * n
+            if counts["empty_pastures"] > 0 and money > ANIMALS["SHEEP"]["cost"] + 500 and shed.get("WHEAT", 0) >= 3:
+                if counts["sheep"] < TARGET_SHEEP and room():
+                    n = min(counts["empty_pastures"], TARGET_SHEEP - counts["sheep"], 2)
+                    if n > 0:
+                        orders.append(["BUY_ANIMAL", "SHEEP", n]); money -= ANIMALS["SHEEP"]["cost"] * n
 
-            # --- safety: buy WHEAT if we can't feed our animals ---
+            # --- seguranca: comprar WHEAT para nao deixar animais com fome ---
             if shed.get("WHEAT", 0) < animals_total and money > 60:
                 need = min(animals_total - shed.get("WHEAT", 0) + 3, (money - 50) // 30)
-                if need > 0 and len(orders) < MAX_MARKET_ORDERS - 2:
+                if need > 0 and room():
                     orders.append(["BUY_PRODUCT", "WHEAT", need]); money -= need * 25
 
-        # --- SELL: convert stored goods to cash ---
-        sell_caps = {"EGG": 9999, "WHEAT": 9999, "MILK": 20, "WOOL": 12,
-                     "STRAWBERRY": 20, "MELON": 15, "TOMATO": 20, "CARROT": 20,
-                     "FERTILIZER": 10}
-        floors = {"EGG": 1, "WHEAT": 1, "MILK": 15, "WOOL": 1, "STRAWBERRY": 20,
-                  "MELON": 25, "TOMATO": 15, "CARROT": 10, "FERTILIZER": 20}
-        prices = obs.get("market", {}).get("prices", {}) or {}
+        # --- FRONT-RUN: dump antecipado de MILK/WOOL no inicio do dia ---
+        # Vende premium IMEDIATAMENTE (antes do lote programado do oponente
+        # open-loop v23_fork), capturando o preco cheio nas primeiras unidades
+        # e derrubando o preco para quem vender depois.
+        if hour < FRONT_RUN_HOUR and day >= 1:
+            for item in ("MILK", "WOOL"):
+                q = shed.get(item, 0)
+                price = prices.get(item, 0)
+                if q > 0 and price >= FRONT_RUN_FLOOR and room():
+                    orders.append(["SELL", item, q])
+        # fim do dia: liquidar o restante do premium (nao segurar)
+        elif hour >= 20 and day >= 1:
+            for item in ("MILK", "WOOL"):
+                q = shed.get(item, 0)
+                if q > 0 and room():
+                    orders.append(["SELL", item, q])
+
+        # --- SELL: converter estoque em caixa (demais itens) ---
+        sell_caps = {"EGG": 9999, "WHEAT": 9999, "STRAWBERRY": 20, "MELON": 15,
+                     "TOMATO": 20, "CARROT": 20, "FERTILIZER": 10}
+        floors = {"EGG": 1, "WHEAT": 1, "STRAWBERRY": 20, "MELON": 25,
+                  "TOMATO": 15, "CARROT": 10, "FERTILIZER": 20}
         wheat_reserve = animals_total + 3
         for item, qty in sorted(shed.items()):
-            if qty <= 0 or item in ("GOOSE", "COW", "SHEEP"):
+            if qty <= 0 or item in ("GOOSE", "COW", "SHEEP", "MILK", "WOOL"):
                 continue
             if item == "WHEAT":
                 sell_qty = qty - wheat_reserve
@@ -359,7 +403,7 @@ class GranjaAgent:
             else:
                 sell_qty = qty
             if day >= LIQUIDATE_DAY:
-                sell_qty = qty  # dump everything endgame
+                sell_qty = qty
             cap = sell_caps.get(item, 15)
             sell_qty = min(sell_qty, cap)
             price = prices.get(item, 0)
@@ -399,7 +443,6 @@ class GranjaAgent:
             self.cared = set()
             self.collected = set()
 
-        # ---- count state ----
         counts = self._count(farm, shed, day)
         assigned = set()
 
@@ -419,9 +462,10 @@ class GranjaAgent:
     def _count(self, farm, shed, day):
         tiles = farm.get("tiles", [])
         coops = pastures = animals = empty_coops = empty_pastures = 0
+        cows = sheep = 0
         wheat = strawberry = melon = tomato = carrot = 0
         needs_fert = 0
-        struct_for = {"GOOSE": 0, "COW": 0}
+        struct_for = {"GOOSE": 0, "COW": 0, "SHEEP": 0}
         for row in tiles:
             for t in row:
                 if not isinstance(t, dict):
@@ -450,23 +494,29 @@ class GranjaAgent:
                         struct_for["GOOSE"] += 1
                 elif k == "PASTURE":
                     pastures += 1
-                    if t.get("animal"):
+                    a = t.get("animal")
+                    if a:
                         animals += 1
+                        if a == "COW":
+                            cows += 1
+                        elif a == "SHEEP":
+                            sheep += 1
                     else:
                         empty_pastures += 1
                         struct_for["COW"] += 1
-        wheat_target = animals + 6
+                        struct_for["SHEEP"] += 1
         return {
             "coops": coops, "pastures": pastures, "animals": animals,
             "empty_coops": empty_coops, "empty_pastures": empty_pastures,
+            "cows": cows, "sheep": sheep,
             "wheat": wheat, "strawberry": strawberry, "melon": melon,
             "tomato": tomato, "carrot": carrot,
             "needs_fert": needs_fert, "empty_structure_for": struct_for,
-            "wheat_target": wheat_target,
+            "wheat_target": animals + 6,
         }
 
 
-agent = GranjaAgent()
+agent = GranjaV3()
 def agent_fn(observation, configuration=None):
     return agent(observation)
 def main_agent(observation, configuration=None):

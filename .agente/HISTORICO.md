@@ -50,6 +50,46 @@ vs random/starter/pass/Grok-v17; win = 12/12 salvo indicado).
 
 ---
 
+## Sessão 2026-08-12 — pesquisa de meta + harness contrafactual + série v3→v9
+
+### Infraestrutura nova (harness contrafactual "strict-future")
+- `replay_agent.py`: reproduz ações de um replay oficial por seat.
+- `bench_replay.py`: contrafactual de 1 replay (2 seats). `bench_pool.py`: pool de
+  15 replays × 2 seats = **30 jogos**, com win rate + margem por oponente real.
+- Descobertas: o seed real fica em `info.seed` (não `configuration.seed`); o replay
+  oficial usa `steps[N]={estado pós-ação N, ação N}` enquanto o env local usa
+  `steps[N]={estado pós-ação N-1, ação N-1}` → indexação `k+1` reproduz exatamente.
+
+### Linha de base (v2) no pool real (30 jogos)
+- v2 = **1/30 vitórias, margem média −101k**. Perde para TODOS (top-5 e casuais,
+  que fazem 60–160k vs nossos 20–30k).
+- Meta do Top-5: abertura v23_fork (1C+4S ou 2C+2S + HIRE) e **rotas open-loop de
+  719–720 ações** pré-computadas (Kaito Fukami v27 clona rota do Ezzzzzekki).
+
+### Experimentos v3→v9 (bench local + pool)
+| v | mudança | bench local | pool margem |
+|---|---|---|---|
+| v3 | abertura animais 2C+2S | ~4,7k (colapso) | — |
+| v4 | front-run melão/morango | ~38,4k (neutro) | — |
+| v5 | staged land conservador | ~36,3k (regressão) | — |
+| v6 | pecuária alta densidade | ~1k (colapso, fluxo PLACE quebrado) | — |
+| v7 | melão cedo + volume (24) | **~42,5k (+12%)** | −105k |
+| v8 | v7 + mãos teto 12 | ~40,3k | **−86,5k** |
+| v9 | v8 + 3º quadrante | ~38,4k (viagem) | −86k |
+
+- Lições: (a) melão cedo+volume = **+12% moedas**; (b) mais mãos = melhor margem
+  no pool (pressão de mercado derruba preço dos oponentes) mas pior vs passivos;
+  (c) 3º quadrante = neutro/piora (regra de ouro #2 confirmada); (d) pecuária
+  REATIVA colapsa (fuga em 2 dias sem feed; fluxo PICKUP→PLACE quebrado) — só
+  rota open-loop determinística funciona, como no topo.
+- Conclusão: teto desta arquitetura ~42k moedas / −86k margem, ainda 0/30 vs real.
+  Fechar o gap exige reescrever o motor (open-loop), não patches.
+
+### Submissão
+- **GranjaAgent v7** (melão cedo + volume) submetido 2026-08-12 (melhor em moedas).
+
+---
+
 ## Roteiro de teste local (reprodutível)
 ```bash
 pip install kaggle-environments --no-deps   # pygame falha, mas env roda

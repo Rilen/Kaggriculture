@@ -2,7 +2,7 @@
 
 > Alimentado na inicialização de cada sessão com pesquisa MCP (Kaggle): leaderboard,
 > discussões, notebooks meta, relatórios de vencedores, datasets de análise.
-> Atualizado: 2026-08-11
+> Atualizado: 2026-08-12
 
 ## Resumo executivo
 
@@ -23,7 +23,33 @@
 
 ## Novidades / segredos capturados (por sessão)
 
-_(Inserir aqui os achados da pesquisa MCP de cada inicialização de sessão, com fonte e data.)_
+### 2026-08-12 — Perfil do líder (Kaito Fukami) e meta atual
+- **Líder: Kaito Fukami** (@kaitofukami), Data Scientist na Financial Engineering Group
+  (Tóquio), tier EXPERT. Fonte: `kaggle_get_user_profile` + `kaggle_search_content`.
+- **Método (post "How I Keep Iterating Kaggriculture Agents", topic 734212):** loop fechado
+  — derrotas reais → 1 mecanismo de falha → challengers → testa múltiplos times nos DOIS
+  seats → rejeita a maioria → congela o vencedor → valida em episódios futuros. Usa Codex
+  Sol Ultra como ferramenta, mas nunca confia quando ela chama a solução de "ótima".
+- **Artefato v27** ("25/27 Strict-Future | v27 Midgame Meta Reset", 151 votos): rota
+  DETERMINÍSTICA open-loop de **719 ações** em `main.py` (20.813 bytes, stdlib, hash público),
+  clonada do replay público do Ezzzzzekki (episódio 91493566) + overlays de WEED repair e
+  ordenação de SELL por price-impact. NÃO é RL de verdade; o tag é cosmético.
+- **Abertura-meta do Top-30:** **26/30 times** usam o mesmo core `1 COW + 4 SHEEP + 5/5
+  sementes + WHEAT 5 + HIRE4/5`. Abertura virou prior; o edge está na CONTINUAÇÃO (step ~161+).
+- **Validação dele:** inner screen (30 casos) + development outer (30) + janela strict-future
+  (27 casos, EpisodeId > cutoff). Rejeitou seat-router por resolver só 1/3 das derrotas reais.
+- **Balance changes 2026-08-06 (PR #1394, engine ≥1.32.6):** Town Center compra 1x/dia (era
+  2x com múltiplos no fim); shops sorteados COM reposição → mercado mais sensível a glut.
+- **Avaliação final:** torneio único Bradley-Terry após 2 semanas de episódios pós-deadline.
+- **Dataset oficial diário de replays:** `kaggle/kaggriculture-episodes-*` + índice
+  `kaggle/kaggriculture-episodes-index` (útil para IL/BC/contrafactual).
+- **Fingerprints de abertura dos top-5** (`revanthtambisetty/kaggriculture-top-player-opening-
+  fingerprints`): 3 clusters — `v23_fork` (Mohamed/tao_wu11/mrgrishninsb, 2C+2S+5H),
+  `sheep_first_hybrid` (HealthStone, 1C+4S+3H+CARE), `counter_meta` (Seb, 14H+4 quads).
+- **Fraquezas do estilo do líder:** (a) open-loop — não reage em runtime; (b) rota clonada
+  pública e previsível; (c) perdeu 2/27 strict-future por margens <1.000; (d) 1 caso
+  wheat-heavy não resolvido; (e) iteração cara (snapshot/freeze) → lento a reagir; (f) cada
+  submissão parte de rating baixo (path dependence).
 
 ## Ações do topo observadas em replays
 
