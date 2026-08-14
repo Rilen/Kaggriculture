@@ -4,9 +4,17 @@
 
 ## Estado da sessão atual
 
-- **Status:** concluída — submission.py = **GranjaAgent v10** submetido ao Kaggle com publicScore **600.0** (novo máximo histórico); commit + push feito
+- **Status:** em andamento — submission.py = **GranjaAgent v11** (V16-RC5) adotado; v10 (C95) submetido com publicScore 600.0; aguardando deploy do v11
 - **Início:** 2026-08-14 19:28
 - **Objetivo:** Analisar partidas reais do v7 contra oponentes (via MCP/Kaggle CLI), estudar a meta atual e definir o que melhorar no próximo submission.py.
+
+## Monitoramento do v10 (4 episódios reais) + descoberta do v11 (executados nesta sessão)
+
+- **v10 real: 4V/0D** (bancos 83–157k), incluindo vitória sobre oponente forte (payoon 111k → 156.907).
+- **Head-to-head local v11/V16-RC5 vs v10/C95 = 38-10** (48 jogos) — market lead do V16 decide.
+- **v11 validado:** pool 13/14 (+83.579) · stress 20 seeds 149k avg · bench local 150–163k.
+- Farm final (seed 42): 9 COW + 4 SHEEP + 10 hands + NE+NW+SW = 158.448 (meta modal).
+- Snapshot: `submission_v11.py` (v11) e `submission_v10.py` (C95).
 
 ## Validação do v10 (executada nesta sessão)
 
@@ -53,13 +61,21 @@
 
 1. **[FEITO] Migrar para pecuária open-loop** (9C/4S): submission.py = v10 (base C95 + aliases),
    validado no `bench_pool.py` (13/14 nos replays reais) e **submetido → publicScore 600.0 (novo máximo)**.
-2. Se mantiver o reativo: FIXs — não fertilizar MELON; WATER 1º na janela 6–12; vender FERTILIZER cedo;
+2. **[FEITO] Upgrado do market layer** — v11 = V16-RC5 (8C/4S + premium market lead): vence o v10 38-10
+   no H2H local (48 jogos). Adotado como submission.py. Próximo passo: submeter o v11 ao Kaggle.
+3. Se mantiver o reativo: FIXs — não fertilizar MELON; WATER 1º na janela 6–12; vender FERTILIZER cedo;
    mãos 10–12; batches pequenos + market lead.
-3. Manter `bench_pool.py` como régua de aceite.
+4. Manter `bench_pool.py` como régua de aceite.
 
 ---
 
 ## Histórico de sessões
+
+### 2026-08-14 — Monitoramento v10 (4V/0D) + v11 (V16-RC5) adotado
+- v10 real: 4V/0D, bancos 83–157k (incl. vitória vs payoon 111k → 156.907).
+- V16-RC5 (boatlee) e adaptive-farming (tetsutani) extraídos; H2H local: v11 vs v10 = 38-10 (48 jogos).
+- v11 validado: pool 13/14 (+83.579) · stress 20 seeds 149k avg · bench 150–163k.
+- submission.py = GranjaAgent v11; snapshots submission_v11.py / submission_v10.py. Aguardando deploy.
 
 ### 2026-08-14 — Migração v10 (pecuária open-loop) concluída, validada e submetida
 - submission.py = GranjaAgent v10 (C95 extraído + docstring + aliases); snapshot submission_v10.py.

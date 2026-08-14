@@ -116,6 +116,29 @@ vs random/starter/pass/Grok-v17; win = 12/12 salvo indicado).
 
 ---
 
+## Sessão 2026-08-14 (continuação) — v11 (V16-RC5 8C/4S + premium market lead)
+
+### Monitoramento do v10 (4 episódios reais 14/08 23:00–23:14)
+- **4V/0D** — bancos 83.224–156.907: vitória fácil vs passivo (127k vs 3k), vs pecuária mal executada
+  (83k vs 21k), vs 12 vacas+3 ovelhas (118k vs 25k), e **vs oponente forte (payoon: 11 vacas + 8 ovelhas +
+  13 mãos, 111.485) → 156.907** (liderança do dia 5 ao 30).
+- O v10 já opera no nível de bancos da meta (83–157k vs meta 84–155k).
+
+### Descoberta: V16-RC5 vence o C95 no H2H local
+- Extraídos os agentes públicos da meta: **V16-RC5** (boatlee, `/tmp/kilo/v16_rc5_main.py`) e
+  **adaptive-farming** (tetsutani, `/tmp/kilo/tetsu_main.py`).
+- Head-to-head local (24 seeds × 2 seats = 48 jogos): **v11/V16-RC5 vs v10/C95 = 38-10** (~79% win).
+  Motivo: market layer do V16 lê a demanda do TOWN e vende 1 turno antes (front-run) → no confronto
+  direto da meta, quem vende antes pega preço melhor e derruba o preço do outro.
+- Réguas das demais (V16 vs C95): pool contrafactual 13/14 (+83.579 vs +81.886) · stress 20 seeds
+  média 149k · bench local ~150–163k. Tetsu ficou no meio (4-4 vs C95 no 1º lote).
+
+### Adoção
+- **submission.py = GranjaAgent v11** (V16-RC5 + docstring + aliases); snapshot `submission_v11.py`;
+  `submission_v10.py` preserva o C95. Aguardando deploy.
+
+---
+
 ## Sessão 2026-08-14 — Partidas reais do v7 (1V/6D) + meta pecuária + agente C95 extraído
 
 ### Partidas reais do v7 (7 episódios 13–14/08) — 1V/6D

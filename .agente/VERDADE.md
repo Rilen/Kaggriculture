@@ -7,25 +7,27 @@
 
 | Campo | Valor |
 |-------|-------|
-| Agente ativo | **GranjaAgent v10** (`submission.py`, rota open-loop de pecuária) — **substituiu o v7 (melão-puro) em 14/08** |
-| Estratégia | Rota determinística (Lev Neganov) 9 COW + 4 SHEEP + 1-2 WHEAT + 10 mãos + NE+NW+SW + controller c17/c27 + weed repair + C94 (feed5 opening + split de vendas) |
-| Score local (12 seeds, 14/08) | random ~157.772 · starter ~157.066 · pass ~146.464 · Grok ~157.040 (**3.6x o v7**) |
-| Partidas REAIS do v7 (7 episódios 13–14/08) | 1V/6D — bancos 27.800–39.476; oponentes 36k–160k (linha de base ANTES da migração) |
-| Head-to-head local v10 vs v7 | **8-0** (v10: 77k–160k vs v7: 27–32k) |
-| Pool contrafactual v10 (7 replays reais × 2 seats = 14 jogos) | **13/14 vitórias, margem média +81.886** (v7: 4/14, −33.834) |
-| Stress test (20 seeds vs pass) | média ~143k · min 103k · max 178k · zero erros/colapsos |
+| Agente ativo | **GranjaAgent v11** (`submission.py`, V16-RC5 8C/4S + premium market lead) — **substituiu o v10 (C95 9C/4S) em 14/08** |
+| Estratégia | Rota determinística 8 COW + 4 SHEEP (Nikita 55440039) + NE+NW+SW + market layer com leitura da demanda do TOWN + front-run 1 turno nas vendas premium + weed repair + terminal |
+| Score local (12 seeds, 14/08) | random ~150.7k · starter ~157.1k · pass ~152.2k · Grok ~162.9k |
+| Partidas REAIS do v10 (4 episódios 14/08) | **4V/0D** — bancos 83k–157k (v10/C95, linha de base da submissão 600.0) |
+| Head-to-head local v11 vs v10 | **38-10** (48 jogos, 24 seeds × 2 seats) — market lead vence confronto direto da meta |
+| Pool contrafactual v11 (7 replays reais × 2 seats = 14 jogos) | **13/14 vitórias, margem média +83.579** |
+| Stress test (20 seeds vs pass) | média ~149k · min 101k · max 190k · zero erros |
 | Último submission Kaggle | **GranjaAgent v10 (2026-08-14 22:58) — publicScore 600.0 (NOVO MÁXIMO histórico)** |
 | Skill rating Kaggle | **v10 = 600.0 (máx histórico)** · A.9 = 539.6 · v7 = 505.0 · A.16 = 70.4 (regressão) |
 
 **Veredito da sessão 14/08**: o v7 (melão-puro) estava OBSOLETO vs a meta de pecuária
-determinística (84k mediano / 160k max). O **v10** (C95 extraído + docstring/aliases) foi
-adotado como submission.py e supera a régua de aceite: 13/14 no pool contrafactual.
+determinística (84k mediano / 160k max). O **v10** (C95) foi submetido → 600.0. A análise
+posterior encontrou o **v11** (V16-RC5, market lead do boatlee) que vence o v10 38-10 no
+H2H local — adotado como submission.py, aguardando deploy.
 
 ## 2. Código
 
-- `submission.py` — agente principal (**GranjaAgent v10** = rota open-loop de pecuária, base C95).
-  Contém aliases `agent`, `agent_fn`, `main_agent`, `c94_submission_agent`.
-- `submission_v10.py` — snapshot do v10 (cópia de submission.py).
+- `submission.py` — agente principal (**GranjaAgent v11** = V16-RC5 8C/4S + premium market lead).
+  Contém aliases `agent`, `agent_fn`, `main_agent`.
+- `submission_v11.py` — snapshot do v11.
+- `submission_v10.py` — snapshot do v10 (C95, substituído; teve 4V/0D reais e publicScore 600.0).
 - `submission_v7.py` — snapshot do v7 (melão-puro, substituído).
 - `bench.py` — benchmark local (12 seeds vs random/starter/pass/Grok). Uso: `python3 bench.py submission.py`.
 - `bench_replay.py` — contrafactual strict-future de 1 replay (2 seats).
@@ -33,8 +35,9 @@ adotado como submission.py e supera a régua de aceite: 13/14 no pool contrafact
 - `replay_agent.py` — reproduz ações de um replay oficial por seat (índice k+1; seed em `info.seed`).
 - `submission_v3.py`–`submission_v9.py` — experimentos documentados (v3/v6 refutados; v7 = antigo deploy).
 - `simulate_local.py`, `analyze_replay.py`, `submission_by_grok.py` — análise/oponente de referência.
-- **Origem do v10:** `/tmp/kilo/c95_main.py` — agente topo C95 extraído do kernel
-  `raykkretzschmar/kaggriculture-findings-from-zero-to-top-meta` (rota Lev Neganov + controller c17/c27).
+- **Origem do v11:** `/tmp/kilo/v16_rc5_main.py` — V16-RC5 do kernel `boatlee/v16-rc5-high-score-8c-4s-premium-market-lead`
+  (rota 8C/4S reconstruída dos replays de Nikita Lugovoy, submission 55440039).
+- **Origem do v10:** `/tmp/kilo/c95_main.py` — C95 do kernel `raykkretzschmar/kaggriculture-findings-from-zero-to-top-meta`.
 
 ## 3. Regras de ouro consolidadas (detalhe em `REGRAS_DE_OURO.md`)
 
@@ -123,13 +126,15 @@ python3 -m kaggle competitions submissions -c kaggriculture
 
 ### Onde estamos
 - v7 = 1/7 vitórias reais; bancos 27–39k vs oponentes 36–160k.
-- **v10 (deployado como submission.py em 14/08):** bench local 146–158k (3.6x v7) · head-to-head 8-0 vs v7 ·
-  13/14 no pool contrafactual (+81.886) · stress 20 seeds sem erros.
-- **Submetido 2026-08-14 22:58 → publicScore 600.0 (NOVO MÁXIMO histórico; v7 era 505.0, A.9 539.6).**
+- **v10 (deployado em 14/08):** bench local 146–158k (3.6x v7) · head-to-head 8-0 vs v7 ·
+  13/14 no pool contrafactual (+81.886) · **submetido → publicScore 600.0 (novo máximo)** · 4V/0D reais.
+- **v11 (adotado como submission.py em 14/08):** H2H vs v10 38-10 (48 jogos) · 13/14 pool (+83.579) ·
+  stress 20 seeds média 149k. Aguardando deploy.
 
 ### Próximo submission.py (recomendações)
-1. **[FEITO] Migrar para rota open-loop de pecuária** (9C/4S): submission.py = v10 (C95 + aliases),
-   validado no `bench_pool.py` (13/14 nos replays reais) e submetido (publicScore 600.0 = máx histórico).
-2. FIX no reativo (se mantido): não fertilizar MELON; fertilizar WHEAT/STRAWBERRY; WATER 1º na janela 6–12;
+1. **[FEITO] Migrar para rota open-loop de pecuária** (v10 = C95 9C/4S, submetido → 600.0).
+2. **[FEITO] Upgrado do market layer** — v11 = V16-RC5 8C/4S + premium market lead (lê demanda do TOWN,
+   vende 1 turno antes): vence o v10 38-10 no H2H local. Próximo passo: submeter o v11.
+3. FIX no reativo (se mantido): não fertilizar MELON; fertilizar WHEAT/STRAWBERRY; WATER 1º na janela 6–12;
    vender FERTILIZER desde cedo; teto de mãos 10–12; batches pequenos + "premium market lead" (1 turno antes).
-3. Manter `bench_pool.py` como régua de aceite (30 jogos).
+4. Manter `bench_pool.py` como régua de aceite (30 jogos).
