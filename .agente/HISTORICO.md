@@ -90,6 +90,68 @@ vs random/starter/pass/Grok-v17; win = 12/12 salvo indicado).
 
 ---
 
+## Sessão 2026-08-14 (continuação) — GranjaAgent v10: migração para pecuária open-loop
+
+### Decisão executada
+- **submission.py = GranjaAgent v10** (base C95 extraído do findings + docstring + aliases
+  `agent_fn`/`main_agent`/`c94_submission_agent`). Snapshot em `submission_v10.py`.
+- O v10 já embute todos os guards recomendados: weed repair (3 camadas), front-run de mercado
+  (1 turno), DROP antes de SELL (shed logistics da rota), terminal liquidation, feed-first.
+
+### Validação local (engine 1.32.6 = replays oficiais)
+| Régua | v7 (melão-puro) | **v10 (pecuária open-loop)** |
+|---|---|---|
+| Bench local (12 seeds) | ~41.7–43.4k | **~146.5–157.8k (3.6x)** |
+| Head-to-head vs v7 (4 seeds × 2 seats) | 0-8 | **8-0** (77–160k vs 27–32k) |
+| Pool contrafactual (7 replays reais × 2 seats) | 4/14 · −33.834 | **13/14 · +81.886** |
+| Stress 20 seeds vs pass | — | média 143k · min 103k · max 178k · 0 erros |
+| Seeds aleatórios (3 jogos) | — | 115–155k, DONE/DONE |
+
+### Farm final da rota (seed 42)
+- 9 COW + 4 SHEEP + 1 empty pasture · 10 hands · NE+NW+SW · 158.448 moedas (meta modal exata).
+
+### Pendência
+- Submeter o v10 ao Kaggle (rating v7 atual = 505.0; histórico máximo A.9 = 539.6).
+
+---
+
+## Sessão 2026-08-14 — Partidas reais do v7 (1V/6D) + meta pecuária + agente C95 extraído
+
+### Partidas reais do v7 (7 episódios 13–14/08) — 1V/6D
+- Vitória 39.476 (oponente fraco: 12 mãos + animais mal executados = 19.289).
+- Derrotas apertadas 34.104–34.514 (oponentes 36–50k: 5 vacas + morango + SW).
+- Esmagamentos 30.238–30.383 (oponentes **147.936–160.285** = pecuária completa da meta).
+- Nossos bancos reais: 27,8k–39,5k (bench local vs passivos dá 42k — o real é mais duro).
+- publicScore da submissão v7: **505.0** (vs A.9 máx 539.6; topo do LB 3264).
+
+### Engine 1.32.6 confirmado (código local = replays oficiais module_version 1.32.6)
+- MELON max_yield **6** / max_yield_day **12** / janela rega 6–12 / cap 6 só com rega
+  → **FERTILIZAR MELÃO É DESPERDÍCIO** (nosso código fertilizava!); guardar p/ WHEAT (max 6 exige fert).
+- STRAWBERRY max_yield 4 interval 2; animal = 1 FERTILIZER/dia vendável ("free money").
+- Glut: MELON ~150un (quadrático); MILK/WOOL quase tão rápidos; WHEAT/EGG ~glut-proof.
+- SE (4k) nunca compensa; topo usa NE+NW+SW (1k+2k).
+
+### Meta atual (live-meta Furina, dados 08-11; Elo 3100+)
+- Modal farm: **9 COW + 4 SHEEP + 1 WHEAT · 10–12 mãos · NE+NW+SW** (30% dos players).
+- Dinheiro: mediano 84.151 / max 154.941 (nós 27–43k → gap 2–4x).
+- Sell rhythm: FERT d4 · MELON d10 · MILK d11 · STRAW d15 · WHEAT d8 · WOOL d6; batches 4–15.
+- Build order C95 (Lev Neganov ep 91587143): d0 4H+1C+1S+seeds+5W; d2 SELL FERT; d7–12 HIRE 6–14/dia
+  +1 COW/dia; d10 BUY_LAND + SELL MELON 5; FERT diário, MILK d9+, WOOL d6+, STRAW d14+.
+
+### Head-to-head local (régua nova)
+- **C95 (topo extraído) vs v7 = 6-0** (77–178k vs 26–33k); C95 vs starter ~127k (v7 ~42k) → ~3x.
+- C95 roda sem erros em seeds novos. `/tmp/kilo/c95_main.py` = base candidata do próximo submission.
+
+### Lições para o próximo submission.py
+1. **Migrar para pecuária open-loop** (8C/4S ou 9C/4S): rota C95/V16-RC5 + guards (WEED repair, FEED
+   first, DROP antes de SELL, liquidar fim); validar no `bench_pool.py` (30 jogos).
+2. Se manter reativo: FIXs — não fertilizar MELON; WATER 1º janela 6–12; vender FERT cedo;
+   mãos 10–12; batches pequenos + "premium market lead" (1 turno antes).
+3. Bench local vs passivos NÃO mede o real (oponentes reais fazem 36–160k); usar head-to-head
+   com C95/V16 e pool contrafactual como régua.
+
+---
+
 ## Roteiro de teste local (reprodutível)
 ```bash
 pip install kaggle-environments --no-deps   # pygame falha, mas env roda
@@ -105,6 +167,7 @@ env.run(['submission.py','starter']); print([round(s['reward'],1) for s in env.s
   `analyze_replay.py`).
 
 ## Oponentes no leaderboard (rating, não moedas)
-- Topo ~3.030–3.217 (Kaito Fukami 3217 em 2026-08-11). Rating reflete
-  vitórias/derrotas, não moedas; moedas altas → vitórias → rating alto.
-- Não há MCP "kaggriculture" configurado; usar Kaggle CLI + env local + replays.
+- Topo 14/08: **カワシギ 3264.3** · Ueddy 3116.0 · researchstudio.site 3110.2 · Utkarsh #2 3098.7 ·
+  somewhere after 3092.6 · Mohamed abdelrazik 3086.1. Kaito Fukami saiu do topo.
+- Rating reflete vitórias/derrotas, não moedas; moedas altas → vitórias → rating alto.
+- MCP Kaggle não autenticado nesta máquina; usar Kaggle CLI + env local + replays.

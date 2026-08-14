@@ -4,48 +4,77 @@
 
 ## Estado da sessão atual
 
-- **Status:** encerrada
-- **Início:** 2026-08-12 (pesquisa de meta + experimentos v3–v9)
-- **Fim:** 2026-08-12 21:18
-- **Objetivo:** Analisar o perfil/meta do Top-5 (Kaito Fukami e outros), construir harness contrafactual (strict-future) e rodar a série v3→v9 para fechar o gap de receita.
+- **Status:** desenvolvimento concluído — submission.py = **GranjaAgent v10** validado; aguardando decisão de deploy no Kaggle
+- **Início:** 2026-08-14 19:28
+- **Objetivo:** Analisar partidas reais do v7 contra oponentes (via MCP/Kaggle CLI), estudar a meta atual e definir o que melhorar no próximo submission.py.
+
+## Validação do v10 (executada nesta sessão)
+
+| Régua | v7 (melão-puro) | **v10 (pecuária open-loop)** |
+|---|---|---|
+| Bench local (12 seeds) | ~41.7–43.4k | **~146.5–157.8k (3.6x)** |
+| Head-to-head vs v7 (4 seeds × 2 seats) | 0-8 | **8-0** (77–160k vs 27–32k) |
+| Pool contrafactual (7 replays reais × 2 seats) | 4/14 · −33.834 | **13/14 · +81.886** |
+| Stress 20 seeds vs pass | — | média 143k · min 103k · max 178k · 0 erros |
+| Seeds aleatórios (3 jogos) | — | 115–155k, DONE/DONE |
+
+- Farm final (seed 42): 9 COW + 4 SHEEP + 10 hands + NE+NW+SW = 158.448 (meta modal).
+- Snapshot em `submission_v10.py`; `submission.py` = v10.
 
 ## Pesquisa MCP — novidades e segredos descobertos
 
-- Líder **Kaito Fukami** (@kaitofukami, EXPERT, Financial Engineering Group/Tóquio): notebook v27 "25/27 Strict-Future" = rota open-loop de 719 ações clonada do Ezzzzzekki + sparse controller. Método: derrota real → 1 falha → challengers → freeze → janela futura.
-- Meta do Top-5: abertura **v23_fork** (1C+4S+5H ou 2C+2S) — 26/30 times convergiram; edge está na CONTINUAÇÃO, não na abertura.
-- Balance change 06/08 (engine ≥1.32.6): TC compra 1x/dia; shops com reposição → mercado mais sensível a glut.
-- Avaliação final: torneio único **Bradley-Terry** após o deadline.
+- **MCP Kaggle não autenticado nesta máquina** (`kaggle_authorize` → Unauthorized); usei Kaggle CLI + webfetch + engine local (mesma versão dos replays: 1.32.6).
+- Leaderboard 14/08: **カワシギ 3264.3** no topo (Kaito Fukami saiu do topo). Nossa submissão v7: publicScore **505.0**.
+- 6 notebooks meta NOVOS baixados para `/tmp/kilo/meta/` (live-meta, adaptive-farming, rank-your-agent, structured-economic-policy, boatlee v16, adaptive-replay-agent).
+- **Agente topo C95 extraído do findings** → `/tmp/kilo/c95_main.py` (75 KB, rota Lev Neganov + controller c17/c27) — vence v7 **6-0** local.
 - Detalhe completo em `INTEL.md`.
 
 ## O que foi feito nesta sessão
 
-- **Harness contrafactual:** `replay_agent.py` + `bench_replay.py` + `bench_pool.py` (15 replays × 2 seats = 30 jogos). Seed real em `info.seed`; indexação `k+1` reproduz exato.
-- **Linha de base:** v2 = 1/30 vitórias, margem média −101k no pool real (topo 60–160k).
-- **Experimentos v3→v9:** v3/v6 pecuária = colapso; v4 front-run = neutro; v5 staged land = regressão; **v7 melão cedo+volume = +12% (~42,5k)**; v8 +mãos = melhor margem (−86k); v9 +3º quad = neutro.
-- **Submissão:** GranjaAgent **v7** submetido 2026-08-12.
-- **Limpeza:** `perdi/` removido; `.gitignore` refinado (removidos globais `*.json/*.csv`; mantidos dados pesados).
+- **Partidas reais do v7 (7 episódios 13–14/08): 1V/6D.** Vitória 39.476 (oponente fraco 19k);
+  derrotas apertadas 34–35k (oponentes 36–50k); esmagamentos 30k vs **147–160k** (pecuária da meta).
+- **Engine confirmado (1.32.6 = replays oficiais):** MELON max_yield 6 / max_yield_day 12 → fertilizar
+  melão é desperdício; WHEAT precisa de fertilizante; FERTILIZER vendável ("free money"); SE=4k nunca.
+- **Head-to-head local:** C95 vs v7 = **6-0** (77–178k vs 26–33k); C95 vs starter ~127k (v7 ~42k) → 3x.
+- **Meta (live-meta, dados 08-11):** modal 9C/4S+1WHEAT · 10–12 mãos · NE+NW+SW · 84k mediano / 155k max.
+- **Build order C95 documentado:** d0 4H+1C+1S+seeds+5W; d2 SELL FERTILIZER; d7–12 HIRE 6–14/dia +1C/dia;
+  d10 BUY_LAND + SELL MELON 5; MILK d9+, WOOL d6+, STRAWBERRY d14+.
 
 ## Resultados / métricas
 
-- Bench local v7 (12 seeds): random **43.137** · starter **41.670** · pass **41.810** · Grok **43.387** (v2 ~37,9k → **+12%**).
-- Pool real v7: 0/30, margem −105k. Melhor margem: v8 (−86,5k).
-- Conclusão: teto da arquitetura ~42k moedas / −86k margem; gap 3–7× vs topo exige reescrever o motor (open-loop).
+- Bench local v7 (12 seeds, 14/08): random 42.705 · starter 41.670 · pass 41.810 · Grok 43.387.
+- v7 real: 1/7 vitórias, bancos 27,8k–39,5k. C95: 77–178k. Meta: 84k mediano / 155k max.
+- **Pool contrafactual (7 replays reais × 2 seats = 14 jogos):**
+  - v7 = **4/14 vitórias, margem média −33.834**
+  - C95 = **13/14 vitórias, margem média +81.886** (+115k vs v7; única derrota −4.3k apertada)
+- Conclusão: teto da arquitetura reativa ~42k é ~2–4x abaixo da meta. Fechar o gap exige rota open-loop.
 
 ## Decisões e próximos passos
 
-1. Deploy corrente: **GranjaAgent v7**. Monitorar rating pós-deploy.
-2. Próximo passo estrutural: clonar/gerar rota open-loop (v23) validada no `bench_pool.py` (30 jogos).
-3. Manter `bench_pool.py` como régua de aceite de qualquer mudança futura.
+1. **[FEITO] Migrar para pecuária open-loop** (9C/4S): submission.py = v10 (base C95 + aliases),
+   validado no `bench_pool.py` (13/14 nos replays reais). Próximo passo: **submeter ao Kaggle**.
+2. Se mantiver o reativo: FIXs — não fertilizar MELON; WATER 1º na janela 6–12; vender FERTILIZER cedo;
+   mãos 10–12; batches pequenos + market lead.
+3. Manter `bench_pool.py` como régua de aceite.
 
 ---
 
 ## Histórico de sessões
 
-### 2026-08-12 — Pesquisa de meta + harness contrafactual + série v3→v9
-- Perfil do líder Kaito Fukami e meta v23_fork documentados em INTEL.md.
-- Harness contrafactual (replay_agent/bench_replay/bench_pool) com 30 jogos; linha de base v2 = 1/30, −101k.
-- Experimentos v3–v9; v7 (melão cedo + volume, +12%) submetido. v3/v6 refutados.
-- `perdi/` removido; `.gitignore` refinado; commit + push no GitHub.
+### 2026-08-14 — Migração v10 (pecuária open-loop) concluída e validada
+- submission.py = GranjaAgent v10 (C95 extraído + docstring + aliases); snapshot submission_v10.py.
+- Validação: bench local 146–158k (3.6x v7) · head-to-head 8-0 vs v7 · pool contrafactual 13/14 (+81.886) ·
+  stress 20 seeds zero erros · seeds aleatórios DONE/DONE.
+- Farm final: 9 COW + 4 SHEEP + 10 hands + NE+NW+SW = 158.448 (meta modal exata).
+- Pendência: submeter v10 ao Kaggle.
+
+### 2026-08-14 — Análise de partidas reais v7 (1V/6D) + meta pecuária + C95 extraído
+- Replays reais do v7 analisados (7 episódios): 1V/6D; oponentes top fazem 147–160k.
+- Engine 1.32.6 confirmado = replays oficiais; fertilizar melão é desperdício; WHEAT precisa de fertilizante.
+- Meta live (Furina): modal 9C/4S+1WHEAT · 10–12 mãos · NE+NW+SW · 84k mediano / 155k max.
+- Agente C95 extraído do findings → `/tmp/kilo/c95_main.py`; vence v7 6-0 local (77–178k vs 26–33k).
+- 6 notebooks meta novos baixados para `/tmp/kilo/meta/`.
+- Decisão: migrar para rota open-loop de pecuária no próximo submission.py.
 
 ### 2026-08-11 — Sessão inicial (organização + sistema .agente)
 - Configuração do sistema `.agente/` (VERDADE, REGRAS_DE_OURO, HISTORICO, INTEL, SESSAO), comandos `/iniciar-sessao` e `/finalizar-sessao`, agente `agente`, limpeza de 80+ arquivos obsoletos.
