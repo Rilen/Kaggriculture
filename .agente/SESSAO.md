@@ -4,7 +4,7 @@
 
 ## Estado da sessão atual
 
-- **Status:** desenvolvimento concluído — submission.py = **GranjaAgent v10** validado; aguardando decisão de deploy no Kaggle
+- **Status:** concluída — submission.py = **GranjaAgent v10** submetido ao Kaggle com publicScore **600.0** (novo máximo histórico); commit + push feito
 - **Início:** 2026-08-14 19:28
 - **Objetivo:** Analisar partidas reais do v7 contra oponentes (via MCP/Kaggle CLI), estudar a meta atual e definir o que melhorar no próximo submission.py.
 
@@ -52,7 +52,7 @@
 ## Decisões e próximos passos
 
 1. **[FEITO] Migrar para pecuária open-loop** (9C/4S): submission.py = v10 (base C95 + aliases),
-   validado no `bench_pool.py` (13/14 nos replays reais). Próximo passo: **submeter ao Kaggle**.
+   validado no `bench_pool.py` (13/14 nos replays reais) e **submetido → publicScore 600.0 (novo máximo)**.
 2. Se mantiver o reativo: FIXs — não fertilizar MELON; WATER 1º na janela 6–12; vender FERTILIZER cedo;
    mãos 10–12; batches pequenos + market lead.
 3. Manter `bench_pool.py` como régua de aceite.
@@ -61,12 +61,13 @@
 
 ## Histórico de sessões
 
-### 2026-08-14 — Migração v10 (pecuária open-loop) concluída e validada
+### 2026-08-14 — Migração v10 (pecuária open-loop) concluída, validada e submetida
 - submission.py = GranjaAgent v10 (C95 extraído + docstring + aliases); snapshot submission_v10.py.
 - Validação: bench local 146–158k (3.6x v7) · head-to-head 8-0 vs v7 · pool contrafactual 13/14 (+81.886) ·
   stress 20 seeds zero erros · seeds aleatórios DONE/DONE.
 - Farm final: 9 COW + 4 SHEEP + 10 hands + NE+NW+SW = 158.448 (meta modal exata).
-- Pendência: submeter v10 ao Kaggle.
+- **Submetido 2026-08-14 22:58 → publicScore 600.0 (novo máximo histórico; v7 505.0, A.9 539.6).**
+- Commit 4c53f02 + push para main.
 
 ### 2026-08-14 — Análise de partidas reais v7 (1V/6D) + meta pecuária + C95 extraído
 - Replays reais do v7 analisados (7 episódios): 1V/6D; oponentes top fazem 147–160k.

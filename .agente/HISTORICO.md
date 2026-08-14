@@ -110,8 +110,9 @@ vs random/starter/pass/Grok-v17; win = 12/12 salvo indicado).
 ### Farm final da rota (seed 42)
 - 9 COW + 4 SHEEP + 1 empty pasture · 10 hands · NE+NW+SW · 158.448 moedas (meta modal exata).
 
-### Pendência
-- Submeter o v10 ao Kaggle (rating v7 atual = 505.0; histórico máximo A.9 = 539.6).
+### Submissão e resultado
+- **GranjaAgent v10 submetido 2026-08-14 22:58 → publicScore 600.0 (NOVO MÁXIMO histórico).**
+  v7 era 505.0; A.9 (antigo máximo) 539.6; topo do leaderboard 3264.3.
 
 ---
 

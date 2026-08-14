@@ -14,8 +14,8 @@
 | Head-to-head local v10 vs v7 | **8-0** (v10: 77k–160k vs v7: 27–32k) |
 | Pool contrafactual v10 (7 replays reais × 2 seats = 14 jogos) | **13/14 vitórias, margem média +81.886** (v7: 4/14, −33.834) |
 | Stress test (20 seeds vs pass) | média ~143k · min 103k · max 178k · zero erros/colapsos |
-| Último submission Kaggle | GranjaAgent v7 (2026-08-13 00:09) — publicScore **505.0** (v10 ainda NÃO submetido) |
-| Skill rating Kaggle | A.9 = 539.6 (máx histórico) · v7 = 505.0 · A.16 = 70.4 (regressão) |
+| Último submission Kaggle | **GranjaAgent v10 (2026-08-14 22:58) — publicScore 600.0 (NOVO MÁXIMO histórico)** |
+| Skill rating Kaggle | **v10 = 600.0 (máx histórico)** · A.9 = 539.6 · v7 = 505.0 · A.16 = 70.4 (regressão) |
 
 **Veredito da sessão 14/08**: o v7 (melão-puro) estava OBSOLETO vs a meta de pecuária
 determinística (84k mediano / 160k max). O **v10** (C95 extraído + docstring/aliases) foi
@@ -124,11 +124,12 @@ python3 -m kaggle competitions submissions -c kaggriculture
 ### Onde estamos
 - v7 = 1/7 vitórias reais; bancos 27–39k vs oponentes 36–160k.
 - **v10 (deployado como submission.py em 14/08):** bench local 146–158k (3.6x v7) · head-to-head 8-0 vs v7 ·
-  13/14 no pool contrafactual (+81.886) · stress 20 seeds sem erros. Ainda NÃO submetido ao Kaggle.
+  13/14 no pool contrafactual (+81.886) · stress 20 seeds sem erros.
+- **Submetido 2026-08-14 22:58 → publicScore 600.0 (NOVO MÁXIMO histórico; v7 era 505.0, A.9 539.6).**
 
 ### Próximo submission.py (recomendações)
 1. **[FEITO] Migrar para rota open-loop de pecuária** (9C/4S): submission.py = v10 (C95 + aliases),
-   validado no `bench_pool.py` (13/14 nos replays reais). Próximo passo: submeter ao Kaggle.
+   validado no `bench_pool.py` (13/14 nos replays reais) e submetido (publicScore 600.0 = máx histórico).
 2. FIX no reativo (se mantido): não fertilizar MELON; fertilizar WHEAT/STRAWBERRY; WATER 1º na janela 6–12;
    vender FERTILIZER desde cedo; teto de mãos 10–12; batches pequenos + "premium market lead" (1 turno antes).
 3. Manter `bench_pool.py` como régua de aceite (30 jogos).
