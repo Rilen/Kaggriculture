@@ -1,7 +1,7 @@
 # VERDADE — Estado Atual do Projeto (Kaggriculture)
 
 > Fonte da verdade do agente. **SEMPRE atualizar este arquivo** no início e fim de cada sessão.
-> Última atualização: 2026-08-14 (sessão de análise de partidas reais v7 + estudo de meta; decisão: migrar p/ pecuária open-loop)
+> Última atualização: 2026-08-15 00:30 (encerramento da sessão de migração pecuária open-loop + deploy v11; aguardando derrotas reais do v11)
 
 ## 1. Versão deployada e score
 
@@ -11,11 +11,12 @@
 | Estratégia | Rota determinística 8 COW + 4 SHEEP (Nikita 55440039) + NE+NW+SW + market layer com leitura da demanda do TOWN + front-run 1 turno nas vendas premium + weed repair + terminal |
 | Score local (12 seeds, 14/08) | random ~150.7k · starter ~157.1k · pass ~152.2k · Grok ~162.9k |
 | Partidas REAIS do v10 (10 episódios 14–15/08) | **8V/2D (80%)** — bancos 63k–157k; derrotas por margens mínimas (−2.184, −1.144) |
+| Partidas REAIS do v11 (3 episódios 15/08) | **3V/0D** — bancos 99k–153k (incl. vitória vs oponente de 80k) |
 | Head-to-head local v11 vs v10 | **38-10** (48 jogos, 24 seeds × 2 seats) — market lead vence confronto direto da meta |
 | Pool contrafactual v11 (7 replays reais × 2 seats = 14 jogos) | **13/14 vitórias, margem média +83.579** |
 | Stress test (20 seeds vs pass) | média ~149k · min 101k · max 190k · zero erros |
-| Último submission Kaggle | **GranjaAgent v11 (2026-08-15 00:06) submetido — aguardando rating** |
-| Skill rating Kaggle | **v10 = 1787.1 (subiu de 600.0 em ~1h de partidas reais)** · A.9 = 539.6 · v7 = 505.0 · A.16 = 70.4 |
+| Último submission Kaggle | **GranjaAgent v11 (2026-08-15 00:06) — em partidas (rating 913.5)** |
+| Skill rating Kaggle | **v10 = 1896.5** (subiu 600.0 → 1896.5 em ~2h) · **v11 = 913.5** (600 → 913.5, 3V/0D) · A.9 = 539.6 · v7 = 505.0 |
 
 **Veredito da sessão 14/08**: o v7 (melão-puro) estava OBSOLETO vs a meta de pecuária
 determinística (84k mediano / 160k max). O **v10** (C95) foi submetido → 600.0. A análise
@@ -127,9 +128,9 @@ python3 -m kaggle competitions submissions -c kaggriculture
 ### Onde estamos
 - v7 = 1/7 vitórias reais; bancos 27–39k vs oponentes 36–160k.
 - **v10 (submetido 14/08):** bench local 146–158k (3.6x v7) · 13/14 pool (+81.886) ·
-  **real 8V/2D (80%) em 10 episódios, rating 600.0 → 1787.1** · derrotas só por margens mínimas.
+  **real 8V/2D (80%) em 10 episódios, rating 600.0 → 1896.5** · derrotas só por margens mínimas.
 - **v11 (submetido 15/08 00:06):** H2H vs v10 38-10 (48 jogos) · 13/14 pool (+83.579) ·
-  stress 20 seeds média 149k. Aguardando primeiros episódios reais.
+  stress 20 seeds média 149k · **real 3V/0D (99–153k), rating 913.5**. Aguardando derrotas p/ análise.
 
 ### Próximo submission.py (recomendações)
 1. **[FEITO] Migrar para rota open-loop de pecuária** (v10 = C95 9C/4S, submetido → 600.0 → 1787.1 real 8V/2D).

@@ -4,17 +4,18 @@
 
 ## Estado da sessão atual
 
-- **Status:** em andamento — submission.py = **GranjaAgent v11** (V16-RC5) adotado; v10 (C95) submetido com publicScore 600.0; aguardando deploy do v11
+- **Status:** encerrada (15/08 00:30) — v10 (C95) 8V/2D real (rating 1896.5) + v11 (V16-RC5) deployado com 3V/0D real (rating 913.5); aguardando derrotas do v11 para próxima análise
 - **Início:** 2026-08-14 19:28
+- **Fim:** 2026-08-15 00:30
 - **Objetivo:** Analisar partidas reais do v7 contra oponentes (via MCP/Kaggle CLI), estudar a meta atual e definir o que melhorar no próximo submission.py.
 
 ## Monitoramento do v10 (4 episódios reais) + descoberta do v11 (executados nesta sessão)
 
 - **v10 real: 4V/0D** (bancos 83–157k), incluindo vitória sobre oponente forte (payoon 111k → 156.907).
-- **v10 real completo (10 episódios): 8V/2D (80%)** — rating 600.0 → **1787.1**; derrotas por margens mínimas.
+- **v10 real completo (10 episódios): 8V/2D (80%)** — rating 600.0 → **1896.5**; derrotas por margens mínimas.
 - **Head-to-head local v11/V16-RC5 vs v10/C95 = 38-10** (48 jogos) — market lead do V16 decide.
 - **v11 validado:** pool 13/14 (+83.579) · stress 20 seeds 149k avg · bench local 150–163k.
-- **v11 submetido 2026-08-15 00:06 (publicScore 600.0 inicial); aguardando partidas reais.**
+- **v11 submetido 2026-08-15 00:06; real 3V/0D (99–153k), rating 600 → 913.5.** Aguardando derrotas.
 - Farm final (seed 42): 9 COW + 4 SHEEP + 10 hands + NE+NW+SW = 158.448 (meta modal).
 - Snapshot: `submission_v11.py` (v11) e `submission_v10.py` (C95).
 
@@ -69,9 +70,21 @@
    mãos 10–12; batches pequenos + market lead.
 4. Manter `bench_pool.py` como régua de aceite.
 
+## Próximos passos (próxima sessão)
+
+1. **Aguardar derrotas reais do v11** (já tem 3V/0D) — baixar replays das derrotas e analisar o mecanismo de falha.
+2. Se o v11 perder para a meta (8C/4S hardcoded), considerar: mesclar market lead do V16 com rota 9C/4S do C95,
+   ou adaptação de execução estilo Seb (LB #1) contra oponentes hardcoded.
+3. Re-checar a meta (live-meta diário) — a meta evolui rápido (12 mãos é o novo padrão; pode mudar de novo).
+
 ---
 
 ## Histórico de sessões
+
+### 2026-08-15 00:30 — Encerramento: v10 8V/2D (1896.5) + v11 3V/0D (913.5)
+- v10 real completo: 8V/2D (80%), rating 600 → 1896.5; derrotas por margens mínimas (−2.184, −1.144).
+- v11 (V16-RC5) submetido 00:06; 3V/0D reais (99–153k), rating 913.5. Sem derrotas até agora.
+- Docs atualizadas (VERDADE/HISTORICO/SESSAO); commits 4c53f02, a3b96a5, 9714b37, 72bd71a em main.
 
 ### 2026-08-14 — Monitoramento v10 (4V/0D) + v11 (V16-RC5) adotado
 - v10 real: 4V/0D, bancos 83–157k (incl. vitória vs payoon 111k → 156.907).

@@ -126,8 +126,12 @@ vs random/starter/pass/Grok-v17; win = 12/12 salvo indicado).
 
 ### Monitoramento completo do v10 (10 episódios reais 14–15/08) — 8V/2D (80%)
 - Vitórias 63–157k; derrotas por margens mínimas: −2.184 (Sky kun) e −1.144 (KiKi).
-- **Rating: 600.0 → 1787.1 em ~1h de partidas reais** (subiu 600 → 1748 → 1787 conforme jogos acumulam).
+- **Rating: 600.0 → 1896.5 em ~2h de partidas reais** (subiu 600 → 1748 → 1787 → 1826 → 1896 conforme jogos acumulam).
 - Confirma: o v10/C95 vence consistentemente a meta real; as derrotas são apertadas (timing de mercado).
+
+### Monitoramento inicial do v11 (3 episódios reais 15/08) — 3V/0D
+- Bancos 99–153k: vs Achille Gohin (153k vs 37k), vs kaggle-skill (121k vs 46k), vs Ahmed Merie (99k vs 80k).
+- **Rating: 600 → 913.5.** Ainda sem derrotas — aguardar derrotas reais para análise de mecanismo de falha.
 
 ### Descoberta: V16-RC5 vence o C95 no H2H local
 - Extraídos os agentes públicos da meta: **V16-RC5** (boatlee, `/tmp/kilo/v16_rc5_main.py`) e
@@ -141,7 +145,8 @@ vs random/starter/pass/Grok-v17; win = 12/12 salvo indicado).
 ### Adoção
 - **submission.py = GranjaAgent v11** (V16-RC5 + docstring + aliases); snapshot `submission_v11.py`;
   `submission_v10.py` preserva o C95.
-- **v11 submetido 2026-08-15 00:06 → publicScore 600.0 inicial; aguardando partidas reais.**
+- **v11 submetido 2026-08-15 00:06 → publicScore 600.0 inicial; real 3V/0D (99–153k), rating 913.5.
+  Aguardando derrotas reais p/ análise do mecanismo de falha.**
 
 ---
 
