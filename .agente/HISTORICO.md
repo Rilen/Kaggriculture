@@ -6,6 +6,82 @@ vs random/starter/pass/Grok-v17; win = 12/12 salvo indicado).
 
 ---
 
+## Sessão 2026-08-15 (final) — v11→v14 deployados, forense top-10, incidente Jairo
+
+### Trajetória de deploy (15/08)
+- **v11** (00:06, V16-RC5 8C/4S + market lead) → **v12** (03:56, +cash-flow fix SELL-antes-BUY) →
+  **v13** (08:23, +FERTILIZER front-run) → **v14** (14:43, V17-R1-RC2 10C/4S boatlee + market overlays).
+- Ratings reais: v11 2117 → v12 2286.7 → v13 2245.6 → **v14 2299.0** (rank 590, 30W/8L = 78.9%).
+- Local: v12 vence v11 20/20 (+292); v13 vence v12 37/40 (+208); v14 (V17) vence v13 34/40 (+4.637);
+  v15 (v14+FERT) vence v14 20/20 (+168).
+- **v15 preparado mas NÃO deployado** (limite diário 5/5 atingido).
+
+### Forense (derrotas + top-10)
+- Derrotas do v14: Haozhe −20.9k (**6C/12S+4 quads** + vegetais condicionais), Benjamin −4.7k
+  (melon-first 8C/4S), HealthStone −2.3k, e 5 clones do próprio v14 (espelhos).
+- **Top-10 = engine 1.32.6** (ninguém adaptou 1.32.7). Kawashigi/GUGUGAGA/Thomas = 6C/12S+4 quads
+  (ANIMAL 11, FERT 1735, WHEAT 1465+838). Ueddy/Junichiro = trader de WHEAT (4952-5037).
+- **Insight (Revanth "Two Private Bots")**: v14 é `v23_fork` com teto ELO ~3130; para passar →
+  counter_meta (4 quads + 20 animais) ou sheep_first (CARE em ovelhas).
+
+### Incidente Jairo (16:19)
+- Jairo (colega) submeteu "SimpleBrain" (ref 55531757, score 253.5) por acidente.
+- **Sem impacto na leaderboard** (Kaggle usa melhor score = v14 2299.0). Limite 5/5 atingido →
+  v15 deployado só amanhã. `submission.py` local já = v15.
+
+---
+
+## Sessão 2026-08-15 — Repo reestruturado + balance change 1.32.7 + bench v11
+
+### Estado pós-git-pull
+- Repo reestruturado: `submission.py`, `bench.py`, `bench_pool.py`, snapshots
+  `submission_v3.py`–`submission_v11.py` e utilitários migrados para `kaggriculture/`.
+  Novos arquivos: `.agente/` (VERDADE/INTEL/HISTORICO/SESSAO/REGRAS), `.kilo/agent/agente.md`,
+  `.kilo/command/{iniciar,finalizar}-sessao.md`, `.kaggle_dl/` (AGENTS.md/README.md).
+- submission.py em disco = **GranjaAgent v11** (V16-RC5 8C/4S + premium market lead). Confirma.
+- Arquivos não-trackados: `analysis_output.txt` (crash log obsoleto de `analyze_losses_batch.py`),
+  `seb_episodes/` (5 replays de 08/08 — não de "Seb" do LB, episode IDs 91057328–91150561).
+
+### Balance change 1.32.7 (PR #1399, merged 2026-08-15 01:24)
+- Carrot, Tomato, Egg: demand curve linear → "hinge". Preços spike quando há alta shop
+  demand E produção zero. Demanda legível via `town.unlocked_shops`.
+- Ordinary-season prices UNCHANGED; só diverge em scarcity extrema.
+- v11 (V16-RC5) não produce eggs/tomatoes/carrots → impacto marginal direto.
+  Mas oponentes adaptativos (ex: Indar Karhana, "Read the Market, Choose the Farm",
+  66 votos, Top 10) ganham edge. Engine local atualizado de 1.32.6 → **1.32.7** (2026-08-15 23:10).
+
+### Bench local v11 (engine 1.32.7, 12 seeds × 4 oponentes)
+- random: 12/12 wins, avg 163.2k (↑ de 152.8k no 1.32.6); starter 157.1k; pass 152.2k; Grok 162.9k.
+- Bench médio ~158.9k — dentro do baseline. v11 não produce eggs/tomatoes/carrots → performance
+  estável vs starter/pass/Grok. O ↑ no random reflete o balance change afetando o bot passivo.
+
+### Partidas reais do v11 (ref 55516028, 49 jogos 15/08 00:06–02:52)
+- **37W/12L (75.5%)**, rating 600 → 913.5 → **2075.5**. Avg coins 97k (wins 98k, losses 93k).
+- 11/12 derrotas por <6000 moedas. Mais apertadas: ShiviWhivi (−56), Dimas Pasha (−616), Alan Rosston (−933).
+- Vitória destacada: vs Achille Gohin 37k → 153k. Conclusão: v11 é sólido; gap para top-50 (~880 pts)
+  é rating volatility + path-dependency, não deficiência técnica.
+
+### Kiznaiver (investigação MCP + replay)
+- Kaggle: `kiznaiver`, tier CONTRIBUTOR, user_id 12266074. Sem notebooks públicos.
+- Não visível no top-50 MCP leaderboard (score ~3100, rank ~3-4, não aparece no fetch).
+- Episódio 91124143 (08/08): Kiznaiver 38026 vs Rilen T. L. 25576 — derrota real, mas score
+  abaixo do meta atual (84k–155k), do qual Kiznaiver subiu ~3100 desde então.
+
+### Deep-dive top meta + v12 (cash-flow fix) — 2026-08-15
+- **Kaito V27** (#1, 155v): rota do Ezzzzzekki (ep 91493566), WHEAT-360/MILK-241/FERT-235,
+  market layer = SELL-slot reorder (só reordena SELLs existentes, nunca cria novos).
+  Sem adaptação ao 1.32.7. Engine 1.32.6.
+- **Reference agents** (baixados, MIT): tiers 6-9 = shared meta 8C/5S/6STRAWBERRY.
+  **v11 H2H: 20/20 wins** (avg +24k-25k). Lição Closer Cleo: sells fund buys na fila de
+  mercado; reordenar quebra cash-flow dos BUY subsequentes.
+- **v12 implementado** = v11 + fix de cash-flow (novo SELL inserido antes do 1º BUY via
+  `_first_buy_slot`). **Validação:** vs v11 20/20 (+292) · vs v10 10/12 (+3066) ·
+  vs ref T6-T9 20/20 · stress PASS 20 seeds 143k avg, 0 erros. Em `submission_v12.py`, NÃO deployado.
+
+---
+
+---
+
 ## v9 "Masterpiece" (estado inicial no disco)
 - BFS + Expansão + Pecuária + Arbitragem + Espionagem + Flush Noturno.
 - Score de leaderboard (rating) histórico: ~374.9. Vs random local: ~6.484.
@@ -129,9 +205,21 @@ vs random/starter/pass/Grok-v17; win = 12/12 salvo indicado).
 - **Rating: 600.0 → 1896.5 em ~2h de partidas reais** (subiu 600 → 1748 → 1787 → 1826 → 1896 conforme jogos acumulam).
 - Confirma: o v10/C95 vence consistentemente a meta real; as derrotas são apertadas (timing de mercado).
 
-### Monitoramento inicial do v11 (3 episódios reais 15/08) — 3V/0D
+### Monitoramento inicial do v11 (3 episódios reais 15/08 00:06–01:00) — 3V/0D
 - Bancos 99–153k: vs Achille Gohin (153k vs 37k), vs kaggle-skill (121k vs 46k), vs Ahmed Merie (99k vs 80k).
-- **Rating: 600 → 913.5.** Ainda sem derrotas — aguardar derrotas reais para análise de mecanismo de falha.
+- **Rating: 600 → 913.5** (3V/0D inicial).
+
+### Monitoramento COMPLETO do v11 (49 episódios reais 15/08 00:06–02:52) — **37W/12L (75.5%)**
+- Rating: **600 → 913.5 → 2075.5** (subindo consistentemente; 49 jogos reais).
+- Avg coins: 97k (wins: 98k, losses: 93k). 11/12 derrotas por <6000 moedas.
+- Derrotas mais apertadas: ShiviWhivi (−56), Dimas Pasha (−616), Alan Rosston (−933),
+  NIklitaCheporev (−1683), aisamhottman (−1736), Yubo WANG (−2795), Dimas Pasha (−3206),
+  premjampuram (−3445), xi luo (−3710), Renoir Vieira (−4919), Jaydon J P (−5822),
+  Charbel Nehme (−14473, outlier).
+- Vitória mais apertada: Md. Hamid 65479 vs 65484 (+5).
+- Conclusão: v11 é sólido e competitivo. Gap de ~880 pts para top-50 é rating volatility
+  + matchmaking (path-dependency), não deficiência técnica. O agente vence 75.5% dos jogos,
+  incluindo contra oponentes de 120k+ coins.
 
 ### Descoberta: V16-RC5 vence o C95 no H2H local
 - Extraídos os agentes públicos da meta: **V16-RC5** (boatlee, `/tmp/kilo/v16_rc5_main.py`) e
@@ -145,8 +233,8 @@ vs random/starter/pass/Grok-v17; win = 12/12 salvo indicado).
 ### Adoção
 - **submission.py = GranjaAgent v11** (V16-RC5 + docstring + aliases); snapshot `submission_v11.py`;
   `submission_v10.py` preserva o C95.
-- **v11 submetido 2026-08-15 00:06 → publicScore 600.0 inicial; real 3V/0D (99–153k), rating 913.5.
-  Aguardando derrotas reais p/ análise do mecanismo de falha.**
+- **v11 submetido 2026-08-15 00:06 (ref 55516028) → publicScore 600.0 inicial; 3V/0D real (99–153k),**
+  **rating 913.5. Agora 37W/12L (75.5%) em 49 jogos, rating 2075.5. Sem reenvio por impulso.**
 
 ---
 

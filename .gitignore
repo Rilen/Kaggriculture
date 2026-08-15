@@ -31,6 +31,10 @@ perdi/
 archive/
 .kaggle_dl/
 *.log
+loss_episodes/
+top_episodes/
+seb_episodes/
+analysis_output.txt
 
 # Inteligência coletada via MCP (kernels baixados)
 .agente/intel/kernels/
