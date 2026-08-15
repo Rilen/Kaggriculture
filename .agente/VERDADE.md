@@ -10,12 +10,12 @@
 | Agente ativo | **GranjaAgent v11** (`submission.py`, V16-RC5 8C/4S + premium market lead) — **substituiu o v10 (C95 9C/4S) em 14/08** |
 | Estratégia | Rota determinística 8 COW + 4 SHEEP (Nikita 55440039) + NE+NW+SW + market layer com leitura da demanda do TOWN + front-run 1 turno nas vendas premium + weed repair + terminal |
 | Score local (12 seeds, 14/08) | random ~150.7k · starter ~157.1k · pass ~152.2k · Grok ~162.9k |
-| Partidas REAIS do v10 (4 episódios 14/08) | **4V/0D** — bancos 83k–157k (v10/C95, linha de base da submissão 600.0) |
+| Partidas REAIS do v10 (10 episódios 14–15/08) | **8V/2D (80%)** — bancos 63k–157k; derrotas por margens mínimas (−2.184, −1.144) |
 | Head-to-head local v11 vs v10 | **38-10** (48 jogos, 24 seeds × 2 seats) — market lead vence confronto direto da meta |
 | Pool contrafactual v11 (7 replays reais × 2 seats = 14 jogos) | **13/14 vitórias, margem média +83.579** |
 | Stress test (20 seeds vs pass) | média ~149k · min 101k · max 190k · zero erros |
-| Último submission Kaggle | **GranjaAgent v10 (2026-08-14 22:58) — publicScore 600.0 (NOVO MÁXIMO histórico)** |
-| Skill rating Kaggle | **v10 = 600.0 (máx histórico)** · A.9 = 539.6 · v7 = 505.0 · A.16 = 70.4 (regressão) |
+| Último submission Kaggle | **GranjaAgent v11 (2026-08-15 00:06) submetido — aguardando rating** |
+| Skill rating Kaggle | **v10 = 1787.1 (subiu de 600.0 em ~1h de partidas reais)** · A.9 = 539.6 · v7 = 505.0 · A.16 = 70.4 |
 
 **Veredito da sessão 14/08**: o v7 (melão-puro) estava OBSOLETO vs a meta de pecuária
 determinística (84k mediano / 160k max). O **v10** (C95) foi submetido → 600.0. A análise
@@ -126,15 +126,15 @@ python3 -m kaggle competitions submissions -c kaggriculture
 
 ### Onde estamos
 - v7 = 1/7 vitórias reais; bancos 27–39k vs oponentes 36–160k.
-- **v10 (deployado em 14/08):** bench local 146–158k (3.6x v7) · head-to-head 8-0 vs v7 ·
-  13/14 no pool contrafactual (+81.886) · **submetido → publicScore 600.0 (novo máximo)** · 4V/0D reais.
-- **v11 (adotado como submission.py em 14/08):** H2H vs v10 38-10 (48 jogos) · 13/14 pool (+83.579) ·
-  stress 20 seeds média 149k. Aguardando deploy.
+- **v10 (submetido 14/08):** bench local 146–158k (3.6x v7) · 13/14 pool (+81.886) ·
+  **real 8V/2D (80%) em 10 episódios, rating 600.0 → 1787.1** · derrotas só por margens mínimas.
+- **v11 (submetido 15/08 00:06):** H2H vs v10 38-10 (48 jogos) · 13/14 pool (+83.579) ·
+  stress 20 seeds média 149k. Aguardando primeiros episódios reais.
 
 ### Próximo submission.py (recomendações)
-1. **[FEITO] Migrar para rota open-loop de pecuária** (v10 = C95 9C/4S, submetido → 600.0).
+1. **[FEITO] Migrar para rota open-loop de pecuária** (v10 = C95 9C/4S, submetido → 600.0 → 1787.1 real 8V/2D).
 2. **[FEITO] Upgrado do market layer** — v11 = V16-RC5 8C/4S + premium market lead (lê demanda do TOWN,
-   vende 1 turno antes): vence o v10 38-10 no H2H local. Próximo passo: submeter o v11.
+   vende 1 turno antes): vence o v10 38-10 no H2H local. Submetido 15/08, aguardando rating.
 3. FIX no reativo (se mantido): não fertilizar MELON; fertilizar WHEAT/STRAWBERRY; WATER 1º na janela 6–12;
    vender FERTILIZER desde cedo; teto de mãos 10–12; batches pequenos + "premium market lead" (1 turno antes).
 4. Manter `bench_pool.py` como régua de aceite (30 jogos).

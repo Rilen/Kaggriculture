@@ -124,6 +124,11 @@ vs random/starter/pass/Grok-v17; win = 12/12 salvo indicado).
   13 mãos, 111.485) → 156.907** (liderança do dia 5 ao 30).
 - O v10 já opera no nível de bancos da meta (83–157k vs meta 84–155k).
 
+### Monitoramento completo do v10 (10 episódios reais 14–15/08) — 8V/2D (80%)
+- Vitórias 63–157k; derrotas por margens mínimas: −2.184 (Sky kun) e −1.144 (KiKi).
+- **Rating: 600.0 → 1787.1 em ~1h de partidas reais** (subiu 600 → 1748 → 1787 conforme jogos acumulam).
+- Confirma: o v10/C95 vence consistentemente a meta real; as derrotas são apertadas (timing de mercado).
+
 ### Descoberta: V16-RC5 vence o C95 no H2H local
 - Extraídos os agentes públicos da meta: **V16-RC5** (boatlee, `/tmp/kilo/v16_rc5_main.py`) e
   **adaptive-farming** (tetsutani, `/tmp/kilo/tetsu_main.py`).
@@ -135,7 +140,8 @@ vs random/starter/pass/Grok-v17; win = 12/12 salvo indicado).
 
 ### Adoção
 - **submission.py = GranjaAgent v11** (V16-RC5 + docstring + aliases); snapshot `submission_v11.py`;
-  `submission_v10.py` preserva o C95. Aguardando deploy.
+  `submission_v10.py` preserva o C95.
+- **v11 submetido 2026-08-15 00:06 → publicScore 600.0 inicial; aguardando partidas reais.**
 
 ---
 

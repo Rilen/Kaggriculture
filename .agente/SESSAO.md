@@ -11,8 +11,10 @@
 ## Monitoramento do v10 (4 episódios reais) + descoberta do v11 (executados nesta sessão)
 
 - **v10 real: 4V/0D** (bancos 83–157k), incluindo vitória sobre oponente forte (payoon 111k → 156.907).
+- **v10 real completo (10 episódios): 8V/2D (80%)** — rating 600.0 → **1787.1**; derrotas por margens mínimas.
 - **Head-to-head local v11/V16-RC5 vs v10/C95 = 38-10** (48 jogos) — market lead do V16 decide.
 - **v11 validado:** pool 13/14 (+83.579) · stress 20 seeds 149k avg · bench local 150–163k.
+- **v11 submetido 2026-08-15 00:06 (publicScore 600.0 inicial); aguardando partidas reais.**
 - Farm final (seed 42): 9 COW + 4 SHEEP + 10 hands + NE+NW+SW = 158.448 (meta modal).
 - Snapshot: `submission_v11.py` (v11) e `submission_v10.py` (C95).
 
