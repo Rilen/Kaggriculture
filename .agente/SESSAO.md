@@ -44,17 +44,18 @@
 
 ## Histórico de sessões
 
-### 2026-08-17 21:30 — Encerramento: deploy v15 efetuado
+### 2026-08-17 21:53 — Encerramento: deploy v15 efetuado + validação contrafactual
 - Credenciais Kaggle restauradas (`KGAT_db8619c9138b243aa16188cf21008d7a`); CLI `kaggle` habilitado via wrapper `/usr/local/bin/kaggle`.
-- Leaderboard verificado: Rilen T. L. rank 437, publicScore 2327.5.
+- Leaderboard verificado: Rilen T. L. rank 437, publicScore 2334.6.
 - Replays reais do v15 baixados (10 episódios) e do v11 (18 episódios). Análise:
   - v15: win rate 7W/3L (70%), bancos avg ~70k, min 37k, max 101k. Derrotas por margens pequenas.
   - v11: win rate 9W/6L (60%), bancos avg 106k, min 40k, max 165k. Derrotas por margens grandes (até -23k).
 - Kernel `boatlee/v17-r1-rc2-high-score-10c-4s-market-storage` baixado; v15 reconstruído (V17-R1-RC2 + FERTILIZER front-run: `_PREEMPT_ENABLED=True`, FERTILIZER em `_PREMIUM`, janela 80–700).
 - Bench v15: 12/8 vitórias, avg ~157k–166k. Smoke test: 142.540 vs starter.
 - `submission.py` atualizado para v15; snapshot em `submission_v15.py`.
-- Commit d638c39 efetuado; push para main bloqueado por falta de credenciais GitHub HTTPS (usuário deve autenticar).
-- **Submissão v15 no LB: ref 55588852 (pending), ref 55578757 (publicScore 2334.6, rank 437).**
+- **Validação contrafactual v15 (33 replays × 2 seats = 76 jogos): 65/76 vitórias (85.5%), margem média +35.293.**
+- Submissão v15 no LB: ref 55588852 (pending), ref 55578757 (publicScore 2334.6, rank 437).
+- Push para main efetuado (commits f331e8a + 00de4c0). GitHub auth OK.
 
 ### 2026-08-17 19:50 — Início de sessão: baseline 1.32.7 + balance change hinge
 - Engine local atualizado para **1.32.7** (balance change "Small balance change" 15/08: CARROT/TOMATO/EGG

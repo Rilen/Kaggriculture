@@ -132,10 +132,11 @@
 
 ## Sessão 2026-08-17 (final)
 - **Credenciais Kaggle restauradas** (`KGAT_db8619c9138b243aa16188cf21008d7a`); CLI `kaggle` habilitado via wrapper `/usr/local/bin/kaggle`.
-- **Submissão ativa no LB: v15 (publicScore 2327.5, rank 437).**
+- **Submissão ativa no LB: v15 (publicScore 2334.6, rank 437).**
 - **v15 reconstruído:** kernel `boatlee/v17-r1-rc2-high-score-10c-4s-market-storage` + FERTILIZER front-run (`_PREEMPT_ENABLED=True`, FERTILIZER em `_PREMIUM`, janela 80–700).
 - Análise real v15 (10 episódios): win rate 7W/3L (70%), bancos avg ~70k, min 37k, max 101k. Derrotas por margens pequenas.
 - Análise real v11 (18 episódios): win rate 9W/6L (60%), bancos avg 106k, min 40k, max 165k. Derrotas por margens grandes (até -23k).
+- **Validação contrafactual v15 (33 replays × 2 seats = 76 jogos): 65/76 vitórias (85.5%), margem média +35.293.**
 
 ## Checklist de pesquisa a cada início de sessão
 
