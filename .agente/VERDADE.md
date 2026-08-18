@@ -17,6 +17,7 @@
 | Partidas REAIS do v11 (3 episódios 15/08) | **3V/0D** — bancos 99k–153k (incl. vitória vs oponente de 80k) |
 | Head-to-head local v11 vs v10 | **38-10** (48 jogos, 24 seeds × 2 seats) — market lead vence confronto direto da meta |
 | Pool contrafactual v11 (7 replays reais × 2 seats = 14 jogos) | **13/14 vitórias, margem média +83.579** |
+| Pool contrafactual v15 (33 replays reais × 2 seats = 76 jogos) | **65/76 vitórias (85.5%), margem média +35.293** |
 | Stress test (20 seeds vs pass) | média ~149k · min 101k · max 190k · zero erros |
 | Último submission Kaggle | **GranjaAgent v15 (2026-08-18 00:46) — pending (anterior 17/08 12:57 = publicScore 2334.6, rank 437)** |
 | Skill rating Kaggle | **v15 = 2334.6** (submetido 17/08 12:57, rank 437) · **v11 = 2117.0** (submetido 15/08 00:06, rating 913.5) · v10 = 1977.9 · v7 = 505.0 |
@@ -29,7 +30,7 @@ H2H local — adotado como submission.py, aguardando deploy.
 ## 2. Código
 
 - `submission.py` — agente principal (**GranjaAgent v15** = V17-R1-RC2 10C/4S + FERTILIZER front-run). Contém aliases `agent`, `agent_fn`, `main_agent`.
-- `submission_v15.py` — snapshot do v15 (submissão ativa, publicScore 2327.5).
+- `submission_v15.py` — snapshot do v15 (submissão ativa, publicScore 2334.6).
 - `submission_v11_clean.py` — snapshot do v11 simplificado (market lead removido por ablation).
 - `submission_v11.py` — snapshot do v11 original (V16-RC5 8C/4S + premium market lead).
 - `submission_v10.py` — snapshot do v10 (C95, substituído; teve 4V/0D reais e publicScore 600.0).
@@ -179,7 +180,7 @@ python3 -m kaggle competitions submissions -c kaggriculture
     (0 diff em 7 seeds vs starter/Grok, 22/22 pool, 10/12 H2H vs v10). Removido do `submission.py` em 17/08.
     A vantagem do v11 sobre o v10 vem da rota 8C/4S, não do market layer.
 3. **[FEITO] Adotar V17-R1-RC2 10C/4S + FERTILIZER front-run como v15** — reconstruído do kernel público do boatlee,
-    preempt habilitado p/ FERTILIZER. Submetido 17/08 12:57 → publicScore 2327.5, rank 437.
-4. FIX no reativo (se mantido): não fertilizar MELÃO; fertilizar WHEAT/STRAWBERRY; WATER 1º na janela 6–12;
-   vender FERTILIZER desde cedo; teto de mãos 10–12; batches pequenos.
+    preempt habilitado p/ FERTILIZER. Submetido 17/08 12:57 → publicScore 2334.6, rank 437.
+4. **[FEITO] Validar v15 no pool contrafactual** — 33 replays reais × 2 seats = 76 jogos: 65/76 vitórias (85.5%),
+    margem média +35.293. Derrotas por margens pequenas (menos de 6k).
 5. Manter `bench_pool.py` como régua de aceite (30 jogos).
