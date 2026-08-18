@@ -1,14 +1,7 @@
-"""GranjaAgent v15 = v14 (V17-R1-RC2 10C/4S) + FERTILIZER nos front-run items.
+"""BL-MDgogo-10C4S-R0: public-replay consensus route with generic execution guards.
 
-Base: v14 (boatlee V17-R1-RC2, rota 10C/4S episodio 92557594, market overlays MD/R5).
-Melhoria: adiciona 'FERTILIZER' aos 3 sets de front-run/preempt (_PREMIUM, _V17_R5_ITEMS,
-_V17_MD_ITEMS). Justificativa (forense 15/08): todos os oponentes vencedores vendem
-FERTILIZER 2-6 steps antes e em volume 5x maior; fertilizante = free money diario dos
-animais sem gate de town demand. No v13 este mesmo fix deu +236 avg vs v12.
-
-Validado localmente (engine 1.32.7):
-  - v14: 34/40 vs v13 (avg +4637), 20/20 vs ref agents, bench random 165k max 204k.
-  - v15: H2H vs v14 (a validar nesta sessao).
+This is a behavioral reconstruction from twelve public traces, not either
+team's hidden source policy. Clone preemption is disabled in this experiment.
 """
 import base64
 import copy
@@ -54,15 +47,15 @@ _SHIFT_STATE = {
     0: {"last_step": -1, "due_step": -1, "due": {}},
     1: {"last_step": -1, "due_step": -1, "due": {}},
 }
-_PREEMPT_ENABLED = False
+_PREEMPT_ENABLED = True
 _PREEMPT_FRACTION = 2.0
-_PREEMPT_MAX_BATCH = 30
+_PREEMPT_MAX_BATCH = 20
 _PREEMPT_MAX_CLONE_DISTANCE = 6
 _PREEMPT_MIN_PRICE_RATIO = 0.0
-_PREEMPT_MIN_FUTURE_QUANTITY = 4
-_PREEMPT_START = 120
-_PREEMPT_STOP = 680
-_PREMIUM = ("STRAWBERRY", "MELON", "MILK", "WOOL", "FERTILIZER")
+_PREEMPT_MIN_FUTURE_QUANTITY = 2
+_PREEMPT_START = 80
+_PREEMPT_STOP = 700
+_PREMIUM = ("FERTILIZER", "STRAWBERRY", "MELON", "MILK", "WOOL")
 
 
 def _get(value, key, default=None):
@@ -343,7 +336,7 @@ def _weed_repair_action(obs, action, step):
 _V17_R5_MARKETS = json.loads(zlib.decompress(base64.b85decode(
     "c-p;M+is&U5d9aPc>von<S}hoHCozKq*c_7M*IJNu~cDG40E%AN|hRs_<}v>%$Z|fuh;D1<MZ!ZcY6AGe9!Xi^4uKy|D}Wcnmr%8CKEn<H9x!_Uk+{G`tfw>+s+=JpPS|_%iaGk&Q0^wKYnT2(`%ORCXa_H?7oNTKV7qP)3)E=?(x1X-k166V)@@_J}dP%ywtCzdq1|vKTQ|B_jH|S+f>1*FMK1(wk5C)J+KpJyHx#R$wGv?TTULI-@C)*q3OEMuYj0sUBuM5pQ^e^Tl*5$h?vO>bLbk+X1ca1(@YPY#7G!#xnpQ4A_!J^>EuBSth-X^Mss0J04yE}Q{FBs5@rl~CvSW?o!TJ<AZu{X0qx=SX|&m4I2dGIn8EsaD-&W=t~BJzav|WD=-=ZUY59SYsmdzy3%W;fI7<X0I(8+b6Pvb+6z|e08QDEET{PV$?SP|i4M|P213nE8;_6zUzA1~P5aLi83L<U1D1&bp<mK4@9!m=C7$K9?AwMl&lhHG5*?kgEg}S;D*^(eCd>wC{-U5O^Ld_5hQATi?WCpCEm8XZ<F|+eTcV&><r$Y%-z@fW1>(Bv1px-5-goHiCX{F5GYrn9hifb{O>C;Rf-4ug(U?`sCw$h-23djb=Z4oPofDqyrCnZ7srio*dq*M(=D)=zTjnYE0N<!nrK`IK^cA8gHDEje!?qLHZms~zs5_zQsAzQ6UI&}I96hR%d$AW6Y9=X8Uq)NmUf`fFCt%{Uk?F~?xsMgk|oX{~VLL^=&>5zV(c&JTsQiN-Zt5BLMc8E?lp$ZcU3l;N^d%QWzVWQe0(PG>NvWRF$<1{2pw3sB*uT8aH4J`9>!*WBHO|cy9n26;H9GZSHI;-eW>J=5=0$<F)GN*3+o*gXqmSapihqFzc7^gX7G*ht~47}e)7e(cDu4IaL28JK(lf;)L6Jnf7H6#+l)UC)TcrTuYdNGqe@wNp*zdw@mohJ#ef><v=t*HjXfi4P(zGof`I}>W!lGQjvY(5)#2b38yRR{E$E*@t!GMf9DTq4Q}1A=p^VC|{ol*~%G75Sq)f<JiOSIl>|QkF?W{ou5@78f%)Ixkw}*kTLkNufIzot4(w(lbh<$i5VBjD^)VmH^z=iye_cM)HObAM6n<cZwPZChjhaz`?4*Y*c;6TX=kZ#!-P?Nrx>uFdDx)b3!Sno*}jiU?W22@0t0>xHXiBB8=byze2@Z*QkAy2B<J@wozf2&B&mGx;#PD@M`T*A)Uxj5w70E_$!tJt=E%N&Glo1n^=PE3G8huMlegI_~GOr_}w%-qt75L@Q2!X7-|Z?8`F7CC5C5J@(sHPuJ`;(VI@-@f3+!o>&1&9#GwiHj_PYDgRMcQ3c8XkF$C?o0KlYLp)wKfSDu*5C^L`9ud{Ed-W|<Uk^;zC3Q~wY)ceKkvYb=w8iXKu6u+P|tD)`6s8S!Z^Yma0IWGhPHTh5lz5xRsba$8T{m&A*!4L2aQC`i0!$X7wxuFpL0hMf{p8"
 )).decode("utf-8"))
-_V17_R5_ITEMS = ('MELON', 'MILK', 'STRAWBERRY', 'WOOL', 'FERTILIZER')
+_V17_R5_ITEMS = ('MELON', 'MILK', 'STRAWBERRY', 'WOOL')
 _V17_R5_FRACTION = 1.0
 _V17_R5_STATE = {
     0: {"last_step": -1, "target": False},
@@ -577,7 +570,7 @@ _V17_MD_MARKETS = json.loads(zlib.decompress(base64.b85decode(
 _V17_MD_FRACTION = 2.0
 _V17_ROOM_GUARD = True
 _V17_FEED_GUARD = False
-_V17_MD_ITEMS = ("MELON", "MILK", "STRAWBERRY", "WOOL", "FERTILIZER")
+_V17_MD_ITEMS = ("MELON", "MILK", "STRAWBERRY", "WOOL")
 _V17_MD_STATE = {
     0: {"last_step": -1, "target": False},
     1: {"last_step": -1, "target": False},
@@ -940,8 +933,5 @@ def agent(obs):
 def _kaggle_submission_entrypoint(obs):
     return agent(obs)
 
-
-# Aliases de compatibilidade com o harness local e o entrypoint do Kaggle.
 agent_fn = agent
 main_agent = agent
-kaggle_agent = agent

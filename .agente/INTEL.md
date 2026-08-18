@@ -2,7 +2,7 @@
 
 > Alimentado na inicialização de cada sessão com pesquisa MCP (Kaggle): leaderboard,
 > discussões, notebooks meta, relatórios de vencedores, datasets de análise.
-> Atualizado: 2026-08-15 (sessão iniciada, bench validado, MCP completo)
+> Atualizado: 2026-08-17 (sessão final: deploy v15 — V17-R1-RC2 10C/4S + FERTILIZER front-run)
 
 ## Resumo executivo
 
@@ -13,60 +13,6 @@
   84k mediano / 155k max de moedas.** Nós (melão-puro v7): 27–43k, 1/7 vitórias reais.
 - Top players são **hardcoded** (traço idêntico entre jogos; 3/3, 3/3, 5/6 nos testados).
   Exceção: Seb (LB #1) adapta execução (35–66% idêntico).
-
-## Novidades / segredos capturados (2026-08-15)
-
-### Balance change 1.32.7 (PR #1399, merged 2026-08-15 01:24)
-- **Carrot, Tomato, Egg**: demand curve linear → "hinge". Preços spike quando há alta
-  shop demand E produção é zero. Demanda legível via `town.unlocked_shops`.
-- **Carrot** (T=450, hinge/1.00): $35→$906 no pico (vs linear quase plano).
-- **Tomato** (T=200, hinge below, target 0.40): $60→$660 no pico (dias 12+).
-- **Egg** (T=332, hinge below, target 0.40): $50→$250 no pico (vs linear $50→$90).
-- Ordinary-season prices UNCHANGED (no-op para demanda normal); só diverge no "tail"
-  (scarcity extrema). O novo meta pode valorizar agents que flexam produção de
-  eggs/tomatoes/carrots quando a demanda shop é alta. **v11 não produce nenhum desses**
-  → impacto marginal direto, mas oponentes adaptativos ganham edge.
-- Engine local ainda em **1.32.6** (não reflete o change). `pip install
-  kaggle-environments==1.32.7` disponível mas exige dependências pesadas (jax, gymnasium,
-  open_spiel). Bench local roda em 1.32.6 → resultados válidos para v11 baseline mas
-  não para o post-balance meta.
-
-### Leaderboard atual (2026-08-15 23:20)
-- #1 **カワシギ 3267.6** (Kaito Fukami, manteve liderança desde 08-12).
-- Top-5: Ueddy 3121.3 · Utkarsh #2 3108.3 · Kostiantyn Isaienkov 3088.8 · researchstudio.site 3072.7.
-- Muitos players no cluster 3000-3120 (atividade intensa em 13-14/08).
-- User rank: **838/4495** equipes. v11 (submetido 15/08 00:06) ainda sem rating real
-  (publicScore 600.0 → 913.5 em 3V/0D local; aguardando mais partidas no novo engine).
-
-### Discussões recentes relevantes (2026-08-15)
-
-#### Topic 734000 — "How path dependent is the current leaderboard rating?" (18 votos)
-- **Rayk Kretzschmar (EXPERT, rank 329)**: submeteu dois agents byte-identicos 2h apart.
-  O primeiro ficou ~1700, o segundo subiu >3000. Gap de 1400 pontos = **matchmaking luck**
-  (seeds, posições de jogador, ordem de resultados iniciais), NÃO qualidade do agente.
-- **Early losses = climbing extremamente lento**: um loss inicial no seeding define uma
-  trajetória de rating que é difícil de reverter mesmo com win streak.
-- **Stale agents do engine antigo (1.32.6−) ainda no pool de matchmaking** — agentes
-  que jogaram no engine anterior continuam sendo emparelhados. Pós-1.32.7, estes agentes
-  podem ser mais fáceis ou mais difíceis dependendo do que eles fazem.
-- **Relevante para nós**: v11 caiu de 913.5 (3V/0D) → 782 — provavelmente early losses
-  contra agentes do novo meta + path dependency. Não necessariamente indica que v11 é pior.
-
-#### Topic 735209 — "4-players? 8-players?" (staff respondeu: "podia ser follow-up competition")
-- Proposta: escalar para 4/8 players. Staff demonstrou interesse. Não afeta a competição atual.
-
-### Kiznaiver (perfil MCP + replay)
-- Kaggle: `kiznaiver`, tier CONTRIBUTOR, user_id 12266074.
-- Earned "Simulation Competitor" badge 2026-08-05 (entrada tardia na competição).
-- **Sem notebooks públicos** (kaggle_search_notebooks: 0 results).
-- **Não aparece no top-50 do leaderboard MCP** — possívelmente submetido recentemente
-  ou rating ainda se estabilizando. Usuário relata score ~3100 (≈ rank 3-4).
-- **Replay local** (seb_episodes/91124143, 2026-08-08): Kiznaiver venceu **Rilen T. L.**
-  (nosso agente) 38026 vs 25576 — foi uma derrota real nossa. Score 38026 é abaixo
-  do meta atual (84k-155k), sugerindo fase inicial/pre-meta.
-- 4 outros replays em `seb_episodes/` (91057328, 91077295, 91138327, 91150561) mostram
-  "Seb (allegedly)" = **カワシギ / Kaito Fukami** (#1 LB) vencendo 3/4. Mohamed
-  abdelrazik venceu 1/1 vs Seb nesses episódios.
 
 ## Notebooks meta baixados (`.agente/intel/kernels/` + `/tmp/kilo/meta/` novos)
 
@@ -83,34 +29,6 @@
 | **structured-economic-policy** (pilkwang, 14/08, 88v) | Política econômica reativa; mãos 12→13; field antes de market |
 | **adaptive-replay-agent** (flexonafft, 14/08, 68v) | Replay agent adaptativo |
 | **v16-rc5-8c-4s-premium-market-lead** (boatlee, 12/08, 82v) | Rota 8C/4S reconstruída (Nikita 55440039) + market lead 1 turno |
-| **(🌾) rank-top10-read-the-market-choose-the-farm** (Indar Karhana, 12/08, **66 votes**) | Mixture of estratégias; lê `unlocked_shops` no step 168 → wool vs balanced route |
-| **wins-not-money** (destbreso, 15/08) | Vitória depende de market timing, não de moedas absolutas |
-| **the-leaderboard-is-a-habitat-gradient** (destbreso, 15/08) | Análise de gradientes de rating no LB |
-
-## Datasets de análise relevantes
-
-| Dataset | Descrição |
-|--------|-----------|
-| `kaggle/kaggriculture-episodes-*` | Replays oficiais diários (até 2026-08-13); ~31MB cada, full trajectory |
-| `kaggle/kaggriculture-episodes-index` | Índice de todos os datasets diários (v16, atualizado 2026-08-15) |
-| **georgymamarin/kaggriculture-episodes** (4GB, 39v) | 720-turn bot duels da ladder: `episodes.csv` (team/bank/rating por seat), `replays.parquet` (20MB, todos os replays) |
-| **raykkretzschmar/kaggriculture-reference-agents** (MIT, 20v) | 10 agentes como skill ladder (tier 0-9); tiers 6-9 = shared meta line; `cross_team_identity.py` detecta plans compartilhados; Bradley-Terry ranking |
-| revanthtambisetty/kaggriculture-top-player-opening-fingerprints | 3 clusters de abertura (v23_fork, sheep_first_hybrid, counter_meta) |
-
-### Cross-reference: CLIST standings (web, snapshot ~2026-08-14)
-- #1 カワシギ 3235.7 · #2 researchstudio.site 3160.6 · #3 Furious Monk 3133 · #4 Mohamed 3115.6 ·
-  #5 Aaweg 3098.5 · #6 jasonstillchasin 3092.2 · #7 Ak 3085.7 · #8 JALKARNA 3077.1 · #10 Ignat 3061.
-- **Kiznaiver não aparece** em nenhum ranking (MCP top-50, CLIST top-10). Possívelmente
-  submetido muito recentemente ou usando team name diferente. No replay de 91124143 (08-08),
-  Kiznaiver venceu Rilen T. L. 38026 vs 25576 — mas 38k é abaixo do meta atual (84k-155k),
-  sugerindo fase inicial.
-
-### Skill ladder (raykkretzschmar reference agents)
-- Tiers 0-5: authored agents (~3k a ~53k coins vs starter). Tier 5 "Rancher Rita" (53k) = competente.
-- Tiers 6-9: **shared meta line** (~186k coins). Diferem apenas no market layer (sell-ordering).
-- **104 teams** aparecem em grupos de plans compartilhados (29/15/8 teams idênticos). Meta convergiu.
-- `cross_team_identity.py`: detecta agents clonados do mesmo plano. Útil para identificar
-  oponents clonados no nosso matchmaking.
 
 ## Novidades / segredos capturados (por sessão)
 
@@ -165,190 +83,65 @@
 - **V16-RC5 (boatlee):** rota 8C/4S reconstruída (Nikita 55440039, 99,91% idêntica entre replays);
   "premium market lead" = vender 1 turno antes da venda planejada quando há estoque.
 
+### 2026-08-17 — Balance change 1.32.7 (hinge) + insights de mercado (nekkon/destbreso) + meta "clone do Kaito"
+- **Engine 1.32.7 (PR #1399, "Small balance change", 15/08):** CARROT/TOMATO/EGG mudaram a curva de
+  escassez de linear → **hinge** `f(x) = u + 8·max(0,u−1)²` (u=x/T). Abaixo do knee = bit-idêntico ao
+  antigo; acima sobe quadrático. Params: CARROT hinge/1.00/T450 (below_target 0.20→1.00 NÃO anunciado!),
+  TOMATO hinge/0.40/T200, EGG hinge/0.40/T332. Frequência de disparo (sem produção): tomato ~50%, carrot
+  ~26%, egg ~22% (destbreso mediu 55/28/26% em 120 episódios). Mediana fica logo abaixo dos knees →
+  jogos medianos quase intocados; tail abre (p90 ~2x). **EGG não alcança dinheiro** (1.00x mediana,
+  1.06x p90). MELON intocado (0/8 menus, demanda 30, knee 300 → nunca cruza). 0/224 vencedores mudam
+  entre builds; bancos variam (dispersão, não expectativa).
+- **Mercado (nekkon "strawberry-pays-24x" + destbreso "wins-not-money", 17/08):** drain da town/season:
+  wheat 525 · strawberry 426 · carrot 327 · milk 327 · tomato 228 · egg 228 · wool 228 · melon 30 ·
+  fertilizer 0 (132 shop-instance-days). Strawberry = maior mercado (24x vendido no timing certo; melhor
+  p/ VENDER, mediano p/ CULTIVAR). **Fertilizer é gerado por TODO animal sobrevivente diariamente MESMO
+  sem alimentar** (`_daily_refresh_animals` → `fertilizer_available=True`, sem acumular) → stream ~2.900/
+  season vs 1.300–1.760 dos produtos → pecuária subvalorizada ~3x. Fertilizer não tem town drain → glut
+  branch ~$98/un (baixa variância; produto é a alta variância). Per tile: animais dominam (15 primeiros
+  tiles = vacas/ovelhas; morango entra ~tile 16). **Walking é o gargalo**: 83% → 55% unit-turns com fix;
+  ~1/3 é o floor. **Shop draw NÃO é independente do play** (trap de benchmark): mesmo seed + bots
+  diferentes → shops diferentes; editar seu próprio bot mantém a town como controle (muda ~1/12 seeds).
+  **Objetivo do LB é Pr[win]=Φ(μ/σ), NÃO margem esperada** — quando atrás, variância ajuda, mediana não.
+- **Meta (istinetz/Michael Timbs/evnchn, 17/08):** topo do LB = **linhagem clone da rota pública do
+  Kaito** — prerecorded, determinística, não reage a oponente/shops; só flex p/ weeds e ordem de venda.
+  Interatividade é muito limitada → rotas fixas funcionam. **Flag hoarding**: times top escondem soluções
+  melhores e vão iterar até o final; diversidade deve aparecer na última semana (deadline 30/09, new
+  entrant 23/09, 5.021 times, $50k).
+- **Rating é path-dependent** (raykkretzschmar, 09-17/08): duas submissões byte-idênticas divergiram
+  1.700 vs 3.000 → o rush inicial é dominado por matchmaking/sorte; rating 3k pode cair p/ 2k em 4 dias.
+  Stale agents (engine antiga) estão saindo do LB. Possível reset pós-deadline (debatedo). → NÃO otimizar
+  para rating inicial; otimizar win rate real.
+- **PPO não compete** (tópico 734952, 13-16/08): PPO puro fica em 5k–22k vs rule-based >150k; hybrid
+  (regras + aprendizado) chega a ~100k (ashok205 rank 5). hengck23 (GM): copiar replay high-reward
+  (ex. 93311715) + BC + estimar capacidade/caixa do oponente + features de "desvio do plano". Maioria
+  acha que rotas determinísticas vão até o deadline; RL só vale se houver decisões online.
+- **Greedy scheduler tem teto estrutural** (niraberman, 16/08): vence tiers 0–4 (100%), ~47% no tier 5,
+  **0/N vs tiers 6–9 por ~80–85k** → "não é action-selection, é arquitetura" — confirma nossa migração
+  p/ rota determinística.
+- **Referências novas citadas:** replay high-reward 93311715 (BC); dataset reference-agents do
+  raykkretzschmar (tiers 0–9 p/ benchmarking); "wins-not-money" (destbreso) e
+  "kaggriculture-visualized-what-every-crop-pays" (georgymamarin: melon em fazenda pequena ainda vence
+  carrot +11.665 em 8/8 seeds no 1.32.7 — "mercado menor ≠ pior crop a 6 tiles").
+
 ## Ações do topo observadas em replays
 
 - Water ~8.6x por planta vs nossa baseline 0.2x (fixado em v17.3/A.5).
 - CARE timing próximo ao yield = +18% DS5.
 - RPA (revenue per action): topo ~$126 vs nosso ~$41.
 
+## Sessão 2026-08-17 (final)
+- **Credenciais Kaggle restauradas** (`KGAT_db8619c9138b243aa16188cf21008d7a`); CLI `kaggle` habilitado via wrapper `/usr/local/bin/kaggle`.
+- **Submissão ativa no LB: v15 (publicScore 2327.5, rank 437).**
+- **v15 reconstruído:** kernel `boatlee/v17-r1-rc2-high-score-10c-4s-market-storage` + FERTILIZER front-run (`_PREEMPT_ENABLED=True`, FERTILIZER em `_PREMIUM`, janela 80–700).
+- Análise real v15 (10 episódios): win rate 7W/3L (70%), bancos avg ~70k, min 37k, max 101k. Derrotas por margens pequenas.
+- Análise real v11 (18 episódios): win rate 9W/6L (60%), bancos avg 106k, min 40k, max 165k. Derrotas por margens grandes (até -23k).
+
 ## Checklist de pesquisa a cada início de sessão
 
-1. [x] Leaderboard atual (`kaggle_get_competition_leaderboard`) — 2026-08-15
-2. [x] Discussões/queries recentes (`kaggle_list_competition_topics` + `kaggle_get_forum_topic`) — topic 735311 (balance change!), 734212 (Kaito), 735209, 735174
-3. [x] Notebooks meta novos (`kaggle_search_notebooks`) — Indar Karhana (66 votos, Top 10)
-4. [ ] Writeups de vencedores, se houver — competição ainda em andamento, sem writeup vencedor
-
-### 2026-08-15 — Top meta deep-dive: Kaito V27, Rayk C71, boatlee V16, reference agents
-
-#### Kaito Fukami V27 (`kaitofukami/25-27-strict-future-v27-midgame-meta-reset`, 155 votes)
-- **Route source**: Ezzzzzekki (episode 91493566), NOT Nikita (v11's source episódios 92165990/92185587/92223213).
-- **Production changes vs V26**: WHEAT 380→360 (less), MILK 218→241 (more), FERTILIZER 245→235 (less), SELL orders 171→168.
-- **Market layer**: "SELL-slot price-impact ordering" — only reorders EXISTING SELL slots, never creates new ones. +1 outer win, +819 margin, no production change.
-- **No opponent adaptation**: "no opponent name, team ID, submission ID, or private opponent inventory enters runtime."
-- **Local eval**: 25/27 strict-future wins vs Top-30 replays. Beats V26 (87/90 LB) 25/27. Beats Kaito V26 14/27→25/27.
-- **Engine**: 1.32.6. **No 1.32.7 adaptation** (no egg/tomato/carrot production).
-- **Route**: 8 COW by step 192, 4 SHEEP from step 0. Same cow/sheep as v11.
-
-#### Rayk Kretzschmar C71 (`raykkretzschmar/kaggriculture-findings-from-zero-to-top-meta`, 83 votes)
-- Educational notebook. Iterated c14 → C94+.
-- Uses Kaito's "conditional memory" dataset (v21-1) → suggestive of adaptive logic in top meta.
-- Loss fixes: C90-C92 (weed recovery), C93-C94 (opening feed denial + one-turn fertilizer preemption).
-- Philosophy: "download current leaders, work out which moves repeat, turn repeatable part into local agent, beat it from both seats."
-
-#### Boatlee V16-RC5 (= v11's source, `boatlee/v16-rc5-high-score-8c-4s-premium-market-lead`, 85 votes)
-- Reconstructed from 3 Nikita replays. Claims 60/60 vs core, 24/24 vs Kaito V27/Rayk C71/llcc — but LOCAL sims vs "public executable artifacts", not LB scores.
-- Market layer = our "premium market lead": moves premium SELLs (MELON/MILK/STRAWBERRY/WOOL) 1 turn early when no town demand.
-
-#### Reference Agents H2H (kaggle-environments 1.32.7) — DOWNLOADED & TESTED
-- Dataset: `raykkretzschmar/kaggriculture-reference-agents` (MIT, downloaded & extracted).
-- Tiers 6-9 (shared meta line) play 8C/5S/6STRAWBERRY across 3 quadrants.
-- v11 (8C/4S + premium market lead) beats ALL four **20/20** (avg margin +24k to +25k):
-  - Broker Bea (T6): 5/5, avg +25,156 | Ledger Lena (T7): 5/5, avg +24,694
-  - Slotter Silas (T8): 5/5, avg +24,736 | Closer Cleo (T9): 5/5, avg +24,833
-- v11 vs Wheat Walter (baseline): 116k–182k coins (avg ~150k).
-- Conclusão: v11's premium market lead é SUPERIOR aos market layers das reference agents (que diferem apenas em SELL reordering).
-
-#### Critical gaps: v11 vs top meta
-
-| Dimensão | v11 (V16-RC5) | Top meta (V27, ref agents) | Gap |
-|---|---|---|---|
-| **SEED source** | Nikita 55440039 (ep 92165990+) | Ezzzzzekki (ep 91493566) | V27: WHEAT-360/MILK-241/FERT-235 vs Nikita's mix |
-| **SHEEP count** | 4 | 5 (ref agents) / 4 (V27) | Ref agents have +1 sheep |
-| **Market lead method** | Cria NEW SELL orders (front_run adds to market list up to 10) | V27: reordena SELLs EXISTENTES apenas | v11 risks cash-flow break (see below) |
-| **1.32.7 adaptation** | Nenhuma (production: WHEAT/STRAWBERRY/MELON/COW/SHEEP) | Nenhuma (todos usam 1.32.6) | VANTAGEM se adaptar primeiro |
-| **Conditional logic** | Zero (pure replay) | C94: feed denial + fertilizer preemption; v21-1: conditional memory | v11 = open-loop, vulnerável a convergent agents |
-| **Route length** | 720 actions (full season) | V27: 719 actions (ambos seats) | v11 may have 1 extra step |
-
-#### **Closer Cleo cash-flow warning** (reference agents/manifesto)
-- "Sells fund the buys that follow them in the queue; hoist sells out of original slots and BUY_PRODUCT WHEAT later fails on near-zero balance — farm loses more than reordering gained."
-- **v11's front_run creates NEW SELL orders** (lines 220-239: `market.append(["SELL", item, quantity])`). This DISPLACES existing orders in the 10-slot queue → SAME cash-flow risk.
-- **Fix**: Reorder only existing SELL slots (like V27), or cap new SELLs to after existing BUYs, or ensure sufficient cash reserve.
-
-#### **1.32.7 opportunity** (unexplored by top meta!)
-- Carrot/Tomato/Egg "hinge" curves: prices spike 10-70x when shop demand high + production zero.
-  - Carrot: $35→$906 (25x), Tomato: $60→$660 (11x), Egg: $50→$250 (5x).
-- Neither v11 nor Kaito V27/Rayk/boatlee produce these. **FIRST adapter gains edge**.
-- Suggestion: Minimal injection — 1-2 GOOSE tiles when PET_CAFE demand high, or CARROT tiles when FARMERS_MARKET/PET_CAFE demand high.
-
-#### Improvement suggestions (ranked by impact/effort):
-1. **[HIGH impact, LOW effort] Market cash-flow fix**: Constrain front_run to not create SELLs that break subsequent BUY ordering. Test: run H2H vs ref agents with cash-flow-aware ordering. Expected: marginal improvement (we already win 20/20).
-2. **[HIGH impact, MED effort] Route source swap**: Switch from Nikita's route to Ezzzzzekki's route (Kaito V27's source, ep 91493566). Production mix: WHEAT-360/MILK-241/FERT-235. Test locally: does it beat v11's current route?
-3. **[MED impact, MED effort] Meta field plan alignment**: Change 8C/4S → 8C/5S/6STRAWBERRY (match ref agents). The extra SHEEP + 6 strawberry tiles is the meta standard. Local test needed.
-4. **[HIGH impact, HIGH effort] 1.32.7 conditional production**: Add GOOSE (egg) or CARROT (tomato) tiles conditionally when town.shop demand is high. Hook into _town_demand_now(). Risk: small plan disruption, but 5-70x price spikes are enormous.
-5. **[MED impact, MED effort] Conditional market timing**: Add minimal conditional logic on premium sell batch sizes based on observed town demand state (not full opponent adaptation, since Kago hides opponent private info).
-
-### 2026-08-15 04:58 — FORENSE das 20 derrotas reais do v12 (ref 55519543, 70 jogos → 50W/20L = 71.4%)
-
-**Estado do v12**: publicScore **2318.3** (subiu de 2103.0). Bench 12/12 (~158.5k). 70 episódios públicos analisados.
-
-#### Padrão universal — TODOS os 7 oponentes vencedores (derrotas >5k moedas):
-| Métrica | Nós (v12) | Oponentes vencedores |
-|---|---|---|
-| **1ª venda FERTILIZER** | step 48-49 | **step 43-47** (2-6 steps antes) |
-| **1ª venda MILK** | step 233-234 | **step 194-229** (5-40 steps antes!) |
-| **SELL orders** | 195 | 207-498 |
-| **BUY_ANIMAL** | 6 | 8-11 (Família A) |
-| **BUY_SEED** | 59 | 70-108 (Família A) |
-| **FERTILIZER vendido** | 300 | 1.735-2.019 (Família A) |
-| **WHEAT vendido** | 479 | 1.138-1.465 (Família A) |
-| **WHEAT comprado** | 189 | 522-838 (Família A) |
-
-#### Duas famílias de oponentes:
-1. **Família A — "High-volume/scaler"** (Shuiys −14.461, Omer −8.082, Beaten_67 −7.426, Héctor −5.753):
-   - 9-11 animais, 4 quads, 100+ seeds, 277 hires. FERTILIZER 1.7-2k + WHEAT 1.1-1.4k vendidos (flood).
-   - Shed FERTILIZER sempre 0 → vendem tudo imediatamente (free money).
-   - 2.5x mais SELL orders (483-498 vs 195).
-2. **Família B — "Mesmo farm, market melhor"** (sci-shi −7.271, Jiajun −6.260, TIM −10.336):
-   - **Fazenda IDÊNTICA à nossa (8C/4S, mesmos plants)** — edge é 100% timing de mercado.
-   - Vender fertilizante no step 47 vs nosso 49, primeiro leite step 194-229 vs nosso 234.
-   - 239-246 SELL orders vs 195 → vendas mais granulares, preços melhores (glut curve).
-   - sci-shi day 7: money 3.294 vs nossos 156 com a MESMA fazenda → edge decide na 1ª semana.
-
-#### Mecânica FERTILIZER confirmada (engine 1.32.7):
-- `COLLECT_FERTILIZER` → +1 FERTILIZER/animal/dia (`fertilizer_available` reset diário).
-- `BUY_PRODUCT` permite WHEAT + FERTILIZER. FERTILIZER preço base 100, linear, 493 até floor.
-- Shed vazio = vendas imediatas. Flood de SELL orders com qty parcialmente não-realizada ainda
-  captura preço (mercado resolve em ordem; 1ª unidade pega melhor preço).
-
-#### Melhorias implementadas nesta sessão (v13):
-- **v13 = v12 + FERTILIZER no _FR_ITEMS** (`('MELON','MILK','STRAWBERRY','WOOL','FERTILIZER')`).
-  Front-run de 1 turno no fertilizante (sem gate de town demand, free money diário).
-- **Validação v13 (1.32.7)**: vs v12 **20/20 (avg +236)** · vs v10 **12/12 (avg +3061)** ·
-  vs ref T6-T9 20/20 (~+25k) · stress PASS 20 seeds avg 143.7k, 0 erros.
-- Arquivo: `submission_v13.py`. NÃO deployado.
-
-#### Sugestões estratégicas (atualizadas pela forense):
-1. **[FEITO → v13]** Front-run de FERTILIZER (captura o timing que TODOS os vencedores usam).
-2. **[ALTA] Flood de SELL orders**: aumentar granularidade das vendas (195 → 240+). Os vencedores
-   vendem em MUITOS lotes pequenos, capturando melhor preço na glut curve. Vender mais cedo
-   fertilizante (step 43-45 vs 48) e leite (step ~220 vs 234).
-3. **[ALTA, Família A] Escala de produção**: 9-11 animais + 4 quads + 100 seeds + mais WHEAT
-   (522-838 vs 189). Mais animais → mais fertilizante free money + leite/lã. Mudança estrutural
-   (nova rota), mas é onde o topo (Beaten_67 145k, Shuiys 128k) está.
-4. **[MÉDIA] Antecipar primeira venda de MILK**: rota vende leite no step 234; vencedores no 194-229.
-   Milk tem glut rápida (76 unid até floor) → vender cedo = preço melhor.
-5. **[MÉDIA] Manter 8C/4S + FERTILIZER front-run** como baseline seguro até testar a escala.
-6. **[RESERVADO] Adaptação 1.32.7** (egg/tomato/carrot hinge) — ninguém no topo adaptou ainda.
-
-### 2026-08-15 10:04 — Forense das 33 derrotas do v13 + descoberta do V17 (10C/4S)
-
-**Estado do v13**: publicScore **2238.4** (40W/33L = 54.8% em 73 jogos — win rate menor que v12 mas o rating é path-dependency, não regressão; v13 vence v12 **37/40** localmente).
-
-**Clone Tipo A1 identificado** (kitory −34k, Raef −20k, Artem −13.6k): **6C/12S/18 pastures/3 quads**.
-- Assinatura: SELL=473-483, BUY_SEED=101, HIRE=277, ANIMAL=11, LAND=3.
-- FERTILIZER 1.735 vendido, WHEAT 1.465 vendido + 838 comprado (vs nossos 300/479/189).
-- Vende FERTILIZER step 43 (vs nosso 49), MILK step 194 (vs 234).
-- **Confirmado: 0 diffs de farmer/hands entre 3 replays → rota determinística compartilhada**, mas NÃO portável como replay puro (agente tem lógica adaptativa de posição). Tentativa de extração de rota pura falhou (25k vs 160k vs pass).
-
-**Clone Tipo A2** (motemen −12.9k, teraSurfer −9.2k, Scomics −10.5k): 9 animais, LAND=2, FERT 1.906-2.098, WHEAT 1.116-1.138 + 515-522 comprado.
-
-**VENCEDOR DO DIA — boatlee V17-R1-RC2 (10C/4S Market & Storage)**:
-- Rota 10 COW / 4 SHEEP, reconstruída do episódio público **92557594** (Kawashigi/MD-family), "twelve public traces".
-- Market layer sofisticada: `_V17_MD_MARKETS`/`_V17_R5_MARKETS` overlays que pré-vendem MELON/MILK/STRAWBERRY/WOOL 1-2 turnos antes baseado na assinatura do oponente (COW/SHEEP/quads); `_rank_sell_slots` price-impact; `_v17_room_guard` (hour 21/23 shed capacity); `_terminal_liquidation`; `_repay_shift`.
-- Notebook afirma: **138-2/140 (98.6%), média +8.385** vs Kaito V27 (20-0, +10k), MDgogo (20-0), Salem (20-0), BL-V14 (20-0), V16-R6 (18-2).
-- SHA-256 `ccf2aefd...`, 49.101 bytes, engine 1.32.6.
-- FERTILIZER NÃO está nos front-run items (só MELON/MILK/STRAWBERRY/WOOL) — diferente do nosso v13.
-
-**Validação local do V17 (v14, engine 1.32.7)**:
-- **vs v13: 34/40 wins (85%), avg +4.637** (min −4.668, max +13.604).
-- vs Reference Agents T6-T9: 20/20, margens 2x maiores (avg +11.5k a +15k).
-- vs PASS: ~158-195k; bench 12/12: random 165k, max 204k, sem colapso.
-- **submission_v14.py criado** = V17 + aliases agent_fn/main_agent. NÃO deployado ainda.
-
-**Implicação estratégica**: a escala 10C/4S + market overlay por família de oponente é o meta atual. O V17 vence consistentemente os clones A1/A2 que nos derrotavam. Adotar V17 como base é o caminho.
-
-### 2026-08-15 17:45 — Forense derrotas v14 + top-10 replay analysis
-
-**Estado do v14**: publicScore **2305.3** (subiu de 2215.8). 38 jogos: **30W/8L (78.9%)**.
-
-**8 derrotas do v14 analisadas**:
-- **Haozhe Wang −20.900** (o maior): 6C/12S + **4 quads** + CARROT/TOMATO/EGG condicionais (100 cada).
-  Day 10: 6C/6S; day 14: 6C/10S + 4 quads; compra 839 WHEAT. Termina 106k vs nossos 89k.
-- **Benjamin −4.666**: 8C/4S "compacto" melon-first — day 2 = 1C/4S + WHEAT (melão cedo), day 7 money 3.099 vs nossos 966. Terminal liquidation agressiva (26 plants no day 29 vs nossos 17).
-- **HealthStone −2.268**: BUY_SEED=158 (mais seeds), CARROT=109, day 1st SELL step 49 (tarde).
-- **John Park −1.765, Exposed −1.210, Tran H −1.047, Amer −813, Rômulo −480**: **clones do nosso v14** (mesma assinatura SELL=501-502/ANIMAL=9/FERT=1906/WHEAT=1138) — espelhos perfeitos, decide seed+timing.
-
-**TOP-10 replay analysis (engine 1.32.6 — ninguém adaptou ao 1.32.7)**:
-- **Kawashigi #1 (3285), GUGUGAGA #8, Thomas #3 = MESMA rota high-volume 6C/12S + 4 quads**:
-  ANIMAL=11, LAND=3, FERT=1.735, WHEAT=1.465+838 comprado, FERT step 43 + MILK step 194.
-  Day 10: 6C/6S → day 14: 6C/10S + 4 quads → day 29: 100.5k. É o clone Tipo A1 (kitory) e o Haozhe.
-- **Ueddy #5 / Junichiro #6 = TRADER de WHEAT**: SELL WHEAT 4.952-5.037 + BUY 4.927-4.986 (compra barato, vende caro em volume), BUY_SEED=22 (pouco plantio), ANIMAL=8.
-- **Egor Trushin (oponente comum em 3 replays) = IDÊNTICO ao nosso v14**: SELL=501, ANIMAL=9, LAND=2, FERT=1906, WHEAT=1138. Confirma que nosso v14 é o "pool" 10C/4S dominante no ladder.
-
-**Notebook "Two Private Bots Beating Meta" (Revanth, 08/09) — 3 clusters de abertura**:
-| Cluster | Abertura | ELO ceiling | Estratégia |
-|---|---|---|---|
-| **v23_fork** (3 top-5) | 5 hires · 2C+2S · 7W/12M seeds | 3117-3131 | = nosso v14/Kawashigi (mesma abertura) |
-| **sheep_first_hybrid** (HealthStone) | 3 hires · 1C+4S · 5W/5M | 3132.9 | CARE compounding em ovelhas |
-| **counter_meta** (Seb, rank-1) | **14 hires · 3C+2S · 14W/3M** | 3201 | **4 quads + 20 animais**, cash cushion |
-
-**INSIGHT CRÍTICO**: nosso v14 (10C/4S, abertura 2C/2S+WHEAT7+MELON12) é uma variação do **v23_fork com teto de ELO ~3130**. Para passar do teto:
-1. **counter_meta (Seb)**: 4 quads + 20 animais (6C/12S+...) + cash cushion no opening. É o que Haozhe/Kawashigi evoluíram.
-2. **sheep_first_hybrid (HealthStone)**: CARE compounding em ovelhas com opening 1C/4S.
-
-**Melhorias recomendadas para v15+** (próximo deploy):
-1. **[FEITO v15] FERTILIZER no front-run** — já validado (20/20 vs v14, avg +168).
-2. **[CRÍTICO] Migrar para rota 6C/12S + 4 quads** (Kawashigi/Haozhe) — o teto do v23_fork exige o 4º quadrante + rebanho maior. Mais ovelhas = mais WHEAT comprado (838 vs 522) + mais fertilizante.
-3. **[ALTA] Antecipar MILK step 194** (vs nosso 198) — 4 steps de edge no leite.
-4. **[MÉDIA] Adaptação 1.32.7** — nenhum top-10 adaptou; primeiro a adaptar ganha edge.
-5. [x] Datasets de análise (`kaggle_search_datasets`) — georgymamarin (4GB, 39v), raykkretzschmar (MIT)
+1. [ ] Leaderboard atual (`kaggle_get_competition_leaderboard` / `kaggle_search_competitions`)
+2. [ ] Discussões/queries recentes da competição (`kaggle_list_competition_topics`, `kaggle_get_forum_topic`)
+3. [ ] Notebooks meta novos (`kaggle_search_notebooks`, filtro por competição)
+4. [ ] Writeups de vencedores, se houver (`kaggle_get_writeup_by_slug`, `kaggle_list_hackathon_write_ups`)
+5. [ ] Datasets de análise (`kaggle_search_datasets`)
+6. [ ] Registrar novidades abaixo e atualizar `VERDADE.md` / `REGRAS_DE_OURO.md` se aplicável
